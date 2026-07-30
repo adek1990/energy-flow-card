@@ -4,7 +4,7 @@
  * Licencja: MIT
  */
 
-const EFC_VERSION = '1.0.0';
+const EFC_VERSION = '1.1.0';
 
 /* eslint-disable no-console */
 console.info(
@@ -523,7 +523,11 @@ class EnergyFlowCard extends HTMLElement {
 
   _read(entityId, factors) {
     const st = this._state(entityId);
-    if (!st) return { v: null, off: true };
+    /* encji nie ma w ogóle w Home Assistancie — literówka w id albo usunięta integracja */
+    if (!st) {
+      if (entityId) this._missing.add(entityId);
+      return { v: null, off: true, missing: true };
+    }
     if (st.state === 'unavailable' || st.state === 'unknown') return { v: null, off: true };
     const raw = parseFloat(st.state);
     if (Number.isNaN(raw)) return { v: null, off: true };
@@ -536,14 +540,17 @@ class EnergyFlowCard extends HTMLElement {
     if (!ids.length) return { v: null, off: true };
     let sum = 0;
     let any = false;
+    let missing = 0;
     ids.forEach((id) => {
       const r = this._read(id, factors);
+      if (r.missing) missing++;
       if (!r.off) {
         sum += r.v;
         any = true;
       }
     });
-    return any ? { v: sum * (invert ? -1 : 1), off: false } : { v: null, off: true };
+    if (any) return { v: sum * (invert ? -1 : 1), off: false };
+    return { v: null, off: true, missing: missing === ids.length };
   }
 
   _power(ref, invert) {
@@ -900,6 +907,7 @@ class EnergyFlowCard extends HTMLElement {
   _model() {
     const c = this._cfg;
     const idle = c.idle_threshold;
+    this._missing = new Set();
 
     const strings = c.solar
       ? c.solar.strings.map((s) => {
@@ -912,6 +920,7 @@ class EnergyFlowCard extends HTMLElement {
             power: p.v,
             energy: e.v,
             off: p.off,
+            missing: !!p.missing,
             idle: !p.off && Math.abs(p.v) < idle,
             powerEntity: s.power,
             energyEntity: s.energy
@@ -959,6 +968,7 @@ class EnergyFlowCard extends HTMLElement {
         name: c.grid.name,
         power: off ? null : p,
         off,
+        missing: !!(c.grid.power ? this._power(c.grid.power).missing : this._power(c.grid.power_import).missing),
         idle: !off && Math.abs(p) < idle,
         energyImport: ei.v,
         energyExport: ee.v,
@@ -976,6 +986,7 @@ class EnergyFlowCard extends HTMLElement {
         name: c.battery.name,
         power: r.off ? null : r.v,
         off: r.off,
+        missing: !!r.missing,
         idle: !r.off && Math.abs(r.v) < idle,
         energy: e.v,
         soc,
@@ -997,7 +1008,8 @@ class EnergyFlowCard extends HTMLElement {
           power: p.v,
           energy: e.v,
           unset: noPower,
-          off: p.off && !noPower,
+          missing: noPower ? !!e.missing : !!p.missing,
+          off: noPower ? !!e.off : p.off,
           idle: !p.off && Math.abs(p.v) < 5,
           powerEntity: d.power,
           energyEntity: d.energy
@@ -1072,7 +1084,7 @@ class EnergyFlowCard extends HTMLElement {
       ['s_' + s.key, 'sl_' + s.key].forEach((id) => {
         const el = this._els[id];
         if (!el) return;
-        set(el, 'pwr', s.off ? 'niedostępny' : fmtW(s.power));
+        set(el, 'pwr', s.missing ? 'brak encji' : s.off ? 'niedostępny' : fmtW(s.power));
         set(el, 'kwh', s.off ? '—' : fmtKwh(s.energy));
         flags(el, s.off, !s.off && s.idle);
         nodes[id] = {
@@ -1132,13 +1144,15 @@ class EnergyFlowCard extends HTMLElement {
     /* sieć */
     if (m.grid) {
       const el = this._els.grid;
-      const label = m.grid.off
+      const label = m.grid.missing
+        ? m.grid.name + ' · brak encji'
+        : m.grid.off
         ? m.grid.name + ' · niedostępna'
         : m.grid.power >= 0
         ? 'Pobór z sieci'
         : 'Oddanie do sieci';
       set(el, 'label', label);
-      set(el, 'pwr', m.grid.off ? 'niedostępny' : fmtW(Math.abs(m.grid.power)));
+      set(el, 'pwr', m.grid.missing ? 'brak encji' : m.grid.off ? 'niedostępny' : fmtW(Math.abs(m.grid.power)));
       set(
         el,
         'kwh',
@@ -1161,13 +1175,19 @@ class EnergyFlowCard extends HTMLElement {
     /* akumulator */
     if (m.battery) {
       const el = this._els.batt;
-      const label = m.battery.off
+      const label = m.battery.missing
+        ? m.battery.name + ' · brak encji'
+        : m.battery.off
         ? m.battery.name + ' · niedostępny'
         : m.battery.power >= 0
         ? 'Ładowanie akumulatora'
         : 'Rozładowanie akumulatora';
       set(el, 'label', label);
-      set(el, 'pwr', m.battery.off ? 'niedostępny' : fmtW(Math.abs(m.battery.power)));
+      set(
+        el,
+        'pwr',
+        m.battery.missing ? 'brak encji' : m.battery.off ? 'niedostępny' : fmtW(Math.abs(m.battery.power))
+      );
       set(
         el,
         'kwh',
@@ -1225,8 +1245,8 @@ class EnergyFlowCard extends HTMLElement {
       g.devices.forEach((d) => {
         const de = this._els['dev_' + d.key];
         if (!de) return;
-        set(de, 'pwr', d.unset ? '—' : d.off ? 'brak' : fmtW(d.power));
-        set(de, 'kwh', d.off && !d.unset ? '—' : fmtKwh(d.energy));
+        set(de, 'pwr', d.missing ? 'brak encji' : d.off ? 'brak' : d.unset ? '—' : fmtW(d.power));
+        set(de, 'kwh', d.off ? '—' : fmtKwh(d.energy));
         flags(de, d.off, !d.off && d.idle);
         nodes['dev_' + d.key] = {
           label: d.name,
@@ -1243,6 +1263,16 @@ class EnergyFlowCard extends HTMLElement {
     });
 
     this._nodes = nodes;
+
+    /* jednorazowe ostrzeżenie o encjach, których nie ma w Home Assistancie */
+    const missingSig = Array.from(this._missing).sort().join(',');
+    if (missingSig && missingSig !== this._missingSig) {
+      this._missingSig = missingSig;
+      console.warn(
+        '[energy-flow-card] Te encje nie istnieją w Home Assistancie (sprawdź id w Narzędzia deweloperskie → Stany):\n  ' +
+          Array.from(this._missing).sort().join('\n  ')
+      );
+    }
 
     this._q.consTitle.textContent =
       'Odbiorniki · ' +

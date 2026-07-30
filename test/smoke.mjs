@@ -258,6 +258,44 @@ ok(card3._nodes['dev_d0_0'].energyEntities.length === 3, 'modal dostaje wszystki
 ok(card3._nodes['dev_d0_1'].entityId === '2 encji · suma', `podpis listy: ${card3._nodes['dev_d0_1'].entityId}`);
 ok(card3.shadowRoot.querySelector('[data-node="dev_d0_0"]').getAttribute('data-off') === null, 'brak data-off przy samym liczniku energii');
 
+console.log('\n— rozróżnienie: brak encji vs encja niedostępna —');
+const hass4 = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([S('sensor.jest_ale_niedostepny', 'unavailable', 'W'), S('sensor.ok_energia', 1.5, 'kWh')]),
+  callWS: async () => ({})
+};
+const card4 = document.createElement('energy-flow-card');
+card4.setConfig({
+  type: 'custom:energy-flow-card',
+  grid: { power: 'sensor.nie_istnieje_wcale' },
+  groups: [
+    {
+      name: 'Diagnostyka',
+      expanded: true,
+      devices: [
+        { name: 'Literówka', power: 'sensor.tez_nie_istnieje' },
+        { name: 'Niedostępny', power: 'sensor.jest_ale_niedostepny' },
+        { name: 'Tylko energia', energy: 'sensor.ok_energia' }
+      ]
+    }
+  ]
+});
+document.body.appendChild(card4);
+card4._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+card4.hass = hass4;
+await new Promise((r) => setTimeout(r, 30));
+const dtxt = (k) => card4.shadowRoot.querySelector(`[data-node="${k}"] [data-f="pwr"]`).textContent;
+ok(dtxt('dev_d0_0') === 'brak encji', `literówka w id → „brak encji" (jest: ${dtxt('dev_d0_0')})`);
+ok(dtxt('dev_d0_1') === 'brak', `encja istnieje, ale unavailable → „brak" (jest: ${dtxt('dev_d0_1')})`);
+ok(dtxt('dev_d0_2') === '—', `sam licznik energii → „—" bez wygaszania (jest: ${dtxt('dev_d0_2')})`);
+ok(
+  card4.shadowRoot.querySelector('[data-node="dev_d0_2"]').getAttribute('data-off') === null,
+  'urządzenie z samą energią nie dostaje data-off'
+);
+ok(card4.shadowRoot.textContent.includes('Sieć · brak encji'), 'nieistniejąca encja sieci opisana wprost');
+ok(card4._missing.has('sensor.nie_istnieje_wcale') && card4._missing.has('sensor.tez_nie_istnieje'), 'lista brakujących encji zebrana do ostrzeżenia');
+ok(card4._missing.has('sensor.jest_ale_niedostepny') === false, 'encja unavailable nie trafia na listę brakujących');
+
 console.log('\n— edytor —');
 const ed = document.createElement('energy-flow-card-editor');
 let emitted = null;
