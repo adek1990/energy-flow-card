@@ -1,0 +1,98 @@
+# Port konfiguracji z sunsynk-power-flow-card (Fronius Symo + Smart Meter 63A + Sonoff/Shelly)
+# Akumulator pominięty — w źródłowej konfiguracji było show_battery: false.
+#
+# Do zweryfikowania po wgraniu (oznaczone SPRAWDŹ niżej):
+#  1. znak mocy sieci i domu — jeśli strzałki idą w złą stronę, przełącz `invert`,
+#  2. odbiorniki mają dziś tylko liczniki energii, więc ich linie są kropkowane (0 W);
+#     odkomentuj `power:` po ustaleniu nazw encji mocy w Narzędziach deweloperskich.
+
+type: custom:energy-flow-card
+title: Przepływ energii
+subtitle: Fronius Symo · Smart Meter 63A
+theme_mode: auto
+animate: true
+legend: true
+history: true
+idle_threshold: 15
+
+solar:
+  name: Fotowoltaika łącznie
+  power: sensor.pv_total_power
+  energy: sensor.pv_total_energy_today
+  strings:
+    - name: Falownik 1
+      icon: panel
+      power: sensor.solarnet_1_fotowoltaika
+    - name: Falownik 2
+      icon: panel
+      power: sensor.solarnet_2_fotowoltaika
+
+grid:
+  name: Sieć
+  # SPRAWDŹ: odpowiednik grid.invert_power: true z sunsynk.
+  # Jeśli przy poborze karta pokazuje "Oddanie do sieci" — usuń tę linię.
+  power: sensor.smart_meter_63a_realna_moc
+  invert: true
+  energy_import: sensor.smart_meter_63a_energia_rzeczywista_plus
+  energy_export: sensor.smart_meter_63a_energia_rzeczywista_minus
+
+house:
+  name: Dom
+  # SPRAWDŹ: Fronius raportuje zużycie wartością ujemną — stąd invert.
+  # Jeśli Twój sensor jest dodatni, usuń `invert: true`.
+  power: sensor.solarnet_1_power_load_consumed
+  invert: true
+  energy: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
+
+groups:
+  - name: Wentylacja
+    icon: fan
+    expanded: true
+    devices:
+      - name: Rekuperator
+        icon: fan
+        # power: sensor.rekuperator_moc
+        energy: sensor.rekuperator_dzis
+
+  - name: Ogrzewanie
+    icon: climate
+    expanded: true
+    devices:
+      - name: Pompa ciepła
+        icon: climate
+        # power: sensor.shellypro3em_fce8c0daec00_total_power
+        energy: sensor.shellypro3em_fce8c0daec00_energy
+
+  - name: Gniazdka Sonoff
+    icon: plug
+    devices:
+      - name: Sonoff · zestaw 1
+        icon: plug
+        energy:
+          - sensor.sonoff_dual_r3_1_energy_1_daily
+          - sensor.sonoff_dual_r3_1_energy_2_daily
+          - sensor.sonoff_dual_r3_2_energy_1_daily
+          - sensor.sonoff_dual_r3_2_energy_2_daily
+          - sensor.sonoff_dual_r3_4_energy_1_daily
+          - sensor.sonoff_dual_r3_4_energy_2_daily
+          - sensor.sonoff_dual_r3_5_energy_1_daily
+          - sensor.sonoff_dual_r3_5_energy_2_daily
+      - name: Sonoff · zestaw 2
+        icon: plug
+        energy:
+          - sensor.sonoff_dual_r3_8_energy_1_daily
+          - sensor.sonoff_dual_r3_8_energy_2_daily
+          - sensor.sonoff_dual_r3_9_energy_1_daily
+          - sensor.sonoff_dual_r3_9_energy_2_daily
+          - sensor.sonoff_dual_r3_10_energy_1_daily
+          - sensor.sonoff_dual_r3_10_energy_2_daily
+          - sensor.sonoff_dual_r3_11_energy_1_daily
+          - sensor.sonoff_dual_r3_11_energy_2_daily
+          - sensor.sonoff_dual_r3_12_energy_1_daily
+          - sensor.sonoff_dual_r3_12_energy_2_daily
+          - sensor.sonoff_dual_r3_13_energy_1_daily
+          - sensor.sonoff_dual_r3_13_energy_2_daily
+
+grid_options:
+  columns: full
+  rows: auto

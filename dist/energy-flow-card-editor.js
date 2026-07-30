@@ -119,6 +119,15 @@ class EnergyFlowCardEditor extends HTMLElement {
   }
 
   _entityPicker(label, value, onChange, domains) {
+    /* listy encji edytuje się w YAML — picker obsługuje jedną encję i skasowałby resztę */
+    if (Array.isArray(value)) {
+      const f = document.createElement('ha-textfield');
+      f.label = label + ' — lista ' + value.length + ' encji';
+      f.value = value.join(', ');
+      f.disabled = true;
+      f.helper = 'Edytuj w widoku YAML';
+      return f;
+    }
     const p = document.createElement('ha-entity-picker');
     p.hass = this._hass;
     p.label = label;

@@ -73,6 +73,17 @@ function fmtKwh(k) {
 const POWER_FACTOR = { W: 1, kW: 1000, MW: 1000000, mW: 0.001 };
 const ENERGY_FACTOR = { Wh: 0.001, kWh: 1, MWh: 1000, GWh: 1000000 };
 
+/* każde pole encji może być pojedynczym id albo listą id — lista jest sumowana */
+const asList = (ref) =>
+  ref === null || ref === undefined ? [] : Array.isArray(ref) ? ref.filter(Boolean) : [ref];
+
+const entityLabel = (ref) => {
+  const l = asList(ref);
+  if (!l.length) return '—';
+  if (l.length === 1) return l[0];
+  return l.length + ' encji · suma';
+};
+
 const slug = (s, i) =>
   (String(s || '')
     .toLowerCase()
@@ -444,12 +455,14 @@ class EnergyFlowCard extends HTMLElement {
         name: raw.solar.name || 'Fotowoltaika łącznie',
         power: raw.solar.power || null,
         energy: raw.solar.energy || null,
+        invert: !!raw.solar.invert,
         strings: (raw.solar.strings || []).map((s, i) => ({
           key: 'str' + i,
           name: s.name || 'String ' + (i + 1),
           icon: s.icon || 'panel',
           power: s.power || null,
-          energy: s.energy || null
+          energy: s.energy || null,
+          invert: s.invert === undefined ? !!raw.solar.invert : !!s.invert
         }))
       };
     }
@@ -479,7 +492,8 @@ class EnergyFlowCard extends HTMLElement {
     c.house = {
       name: (raw.house && raw.house.name) || 'Dom',
       power: (raw.house && raw.house.power) || null,
-      energy: (raw.house && raw.house.energy) || null
+      energy: (raw.house && raw.house.energy) || null,
+      invert: !!(raw.house && raw.house.invert)
     };
 
     c.groups = (raw.groups || []).map((g, i) => ({
@@ -489,10 +503,11 @@ class EnergyFlowCard extends HTMLElement {
       expanded: !!g.expanded,
       devices: (g.devices || []).map((d, j) => ({
         key: 'd' + i + '_' + j,
-        name: d.name || d.power || 'Urządzenie',
+        name: d.name || (typeof d.power === 'string' ? d.power : 'Urządzenie'),
         icon: d.icon || 'plug',
         power: d.power || null,
-        energy: d.energy || null
+        energy: d.energy || null,
+        invert: d.invert === undefined ? !!g.invert : !!d.invert
       }))
     }));
 
@@ -506,24 +521,37 @@ class EnergyFlowCard extends HTMLElement {
     return this._hass.states[entityId] || null;
   }
 
-  _power(entityId, invert) {
+  _read(entityId, factors) {
     const st = this._state(entityId);
     if (!st) return { v: null, off: true };
     if (st.state === 'unavailable' || st.state === 'unknown') return { v: null, off: true };
     const raw = parseFloat(st.state);
     if (Number.isNaN(raw)) return { v: null, off: true };
-    const f = POWER_FACTOR[st.attributes.unit_of_measurement] || 1;
-    return { v: raw * f * (invert ? -1 : 1), off: false };
+    return { v: raw * (factors[st.attributes.unit_of_measurement] || 1), off: false };
   }
 
-  _energy(entityId) {
-    const st = this._state(entityId);
-    if (!st) return { v: null, off: true };
-    if (st.state === 'unavailable' || st.state === 'unknown') return { v: null, off: true };
-    const raw = parseFloat(st.state);
-    if (Number.isNaN(raw)) return { v: null, off: true };
-    const f = ENERGY_FACTOR[st.attributes.unit_of_measurement] || 1;
-    return { v: raw * f, off: false };
+  /* suma po liście encji; „niedostępne", gdy żadna z nich nie ma poprawnego odczytu */
+  _sum(ref, factors, invert) {
+    const ids = asList(ref);
+    if (!ids.length) return { v: null, off: true };
+    let sum = 0;
+    let any = false;
+    ids.forEach((id) => {
+      const r = this._read(id, factors);
+      if (!r.off) {
+        sum += r.v;
+        any = true;
+      }
+    });
+    return any ? { v: sum * (invert ? -1 : 1), off: false } : { v: null, off: true };
+  }
+
+  _power(ref, invert) {
+    return this._sum(ref, POWER_FACTOR, invert);
+  }
+
+  _energy(ref, invert) {
+    return this._sum(ref, ENERGY_FACTOR, invert);
   }
 
   _numeric(entityId) {
@@ -875,8 +903,8 @@ class EnergyFlowCard extends HTMLElement {
 
     const strings = c.solar
       ? c.solar.strings.map((s) => {
-          const p = this._power(s.power);
-          const e = this._energy(s.energy);
+          const p = this._power(s.power, s.invert);
+          const e = this._energy(s.energy, s.invert);
           return {
             key: s.key,
             name: s.name,
@@ -893,16 +921,20 @@ class EnergyFlowCard extends HTMLElement {
 
     let solar = null;
     if (c.solar) {
-      const direct = c.solar.power ? this._power(c.solar.power) : null;
+      const direct = c.solar.power ? this._power(c.solar.power, c.solar.invert) : null;
       const sum = strings.reduce((t, s) => t + (s.off ? 0 : s.power), 0);
-      const eDirect = c.solar.energy ? this._energy(c.solar.energy) : null;
+      const eDirect = c.solar.energy ? this._energy(c.solar.energy, c.solar.invert) : null;
       const eSum = strings.reduce((t, s) => t + (s.energy || 0), 0);
       solar = {
         name: c.solar.name,
         power: direct && !direct.off ? direct.v : sum,
         energy: eDirect && !eDirect.off ? eDirect.v : eSum,
-        powerEntities: c.solar.power ? [c.solar.power] : strings.map((s) => s.powerEntity).filter(Boolean),
-        energyEntities: c.solar.energy ? [c.solar.energy] : strings.map((s) => s.energyEntity).filter(Boolean)
+        powerEntities: c.solar.power
+          ? asList(c.solar.power)
+          : strings.reduce((a, s) => a.concat(asList(s.powerEntity)), []),
+        energyEntities: c.solar.energy
+          ? asList(c.solar.energy)
+          : strings.reduce((a, s) => a.concat(asList(s.energyEntity)), [])
       };
       solar.idle = Math.abs(solar.power) < idle;
     }
@@ -930,8 +962,8 @@ class EnergyFlowCard extends HTMLElement {
         idle: !off && Math.abs(p) < idle,
         energyImport: ei.v,
         energyExport: ee.v,
-        powerEntities: [c.grid.power, c.grid.power_import].filter(Boolean),
-        energyEntities: [c.grid.energy_import, c.grid.energy_export].filter(Boolean)
+        powerEntities: asList(c.grid.power).concat(asList(c.grid.power_import)),
+        energyEntities: asList(c.grid.energy_import).concat(asList(c.grid.energy_export))
       };
     }
 
@@ -947,22 +979,25 @@ class EnergyFlowCard extends HTMLElement {
         idle: !r.off && Math.abs(r.v) < idle,
         energy: e.v,
         soc,
-        powerEntities: [c.battery.power],
-        energyEntities: c.battery.energy ? [c.battery.energy] : []
+        powerEntities: asList(c.battery.power),
+        energyEntities: asList(c.battery.energy)
       };
     }
 
     const groups = c.groups.map((g) => {
       const devices = g.devices.map((d) => {
-        const p = this._power(d.power);
-        const e = this._energy(d.energy);
+        const p = this._power(d.power, d.invert);
+        const e = this._energy(d.energy, d.invert);
+        /* brak skonfigurowanej encji mocy ≠ encja niedostępna — nie wygaszamy wiersza */
+        const noPower = asList(d.power).length === 0;
         return {
           key: d.key,
           name: d.name,
           icon: d.icon,
           power: p.v,
           energy: e.v,
-          off: p.off,
+          unset: noPower,
+          off: p.off && !noPower,
           idle: !p.off && Math.abs(p.v) < 5,
           powerEntity: d.power,
           energyEntity: d.energy
@@ -981,24 +1016,24 @@ class EnergyFlowCard extends HTMLElement {
         active,
         off: devices.length > 0 && devices.every((d) => d.off),
         idle: sum < idle,
-        powerEntities: devices.map((d) => d.powerEntity).filter(Boolean),
-        energyEntities: devices.map((d) => d.energyEntity).filter(Boolean)
+        powerEntities: devices.reduce((a, d) => a.concat(asList(d.powerEntity)), []),
+        energyEntities: devices.reduce((a, d) => a.concat(asList(d.energyEntity)), [])
       };
     });
 
     const consSum = groups.reduce((t, g) => t + g.power, 0);
     const consNrg = groups.reduce((t, g) => t + g.energy, 0);
-    const hp = c.house.power ? this._power(c.house.power) : null;
-    const he = c.house.energy ? this._energy(c.house.energy) : null;
+    const hp = c.house.power ? this._power(c.house.power, c.house.invert) : null;
+    const he = c.house.energy ? this._energy(c.house.energy, c.house.invert) : null;
     const house = {
       name: c.house.name,
       power: hp && !hp.off ? hp.v : consSum,
       energy: he && !he.off ? he.v : consNrg,
       powerEntities: c.house.power
-        ? [c.house.power]
+        ? asList(c.house.power)
         : groups.reduce((a, g) => a.concat(g.powerEntities), []),
       energyEntities: c.house.energy
-        ? [c.house.energy]
+        ? asList(c.house.energy)
         : groups.reduce((a, g) => a.concat(g.energyEntities), [])
     };
 
@@ -1042,14 +1077,14 @@ class EnergyFlowCard extends HTMLElement {
         flags(el, s.off, !s.off && s.idle);
         nodes[id] = {
           label: s.name,
-          entityId: s.powerEntity || '—',
+          entityId: entityLabel(s.powerEntity),
           icon: s.icon,
           accent: 'solar',
           power: s.power,
           energy: s.energy,
           off: s.off,
-          powerEntities: [s.powerEntity].filter(Boolean),
-          energyEntities: [s.energyEntity].filter(Boolean)
+          powerEntities: asList(s.powerEntity),
+          energyEntities: asList(s.energyEntity)
         };
       });
     });
@@ -1062,8 +1097,9 @@ class EnergyFlowCard extends HTMLElement {
       flags(el, false, m.solar.idle);
       nodes['solar-sum'] = {
         label: m.solar.name,
-        entityId:
-          c.solar.power || (m.solar.powerEntities.length + ' encji · suma stringów'),
+        entityId: c.solar.power
+          ? entityLabel(c.solar.power)
+          : m.solar.powerEntities.length + ' encji · suma stringów',
         icon: 'sun',
         accent: 'solar',
         power: m.solar.power,
@@ -1081,7 +1117,9 @@ class EnergyFlowCard extends HTMLElement {
     set(hub, 'self', m.house.selfPct + '% samowystarczalności');
     nodes.hub = {
       label: m.house.name,
-      entityId: c.house.power || m.house.powerEntities.length + ' encji · suma odbiorników',
+      entityId: c.house.power
+        ? entityLabel(c.house.power)
+        : m.house.powerEntities.length + ' encji · suma odbiorników',
       icon: 'house',
       accent: 'cons',
       power: m.house.power,
@@ -1109,7 +1147,7 @@ class EnergyFlowCard extends HTMLElement {
       flags(el, m.grid.off, !m.grid.off && m.grid.idle);
       nodes.grid = {
         label,
-        entityId: c.grid.power || c.grid.power_import || '—',
+        entityId: entityLabel(c.grid.power || c.grid.power_import),
         icon: 'tower',
         accent: 'grid',
         power: m.grid.power,
@@ -1140,7 +1178,7 @@ class EnergyFlowCard extends HTMLElement {
       flags(el, m.battery.off, !m.battery.off && m.battery.idle);
       nodes.batt = {
         label,
-        entityId: c.battery.power,
+        entityId: entityLabel(c.battery.power),
         icon: 'battery',
         accent: 'batt',
         power: m.battery.power,
@@ -1187,19 +1225,19 @@ class EnergyFlowCard extends HTMLElement {
       g.devices.forEach((d) => {
         const de = this._els['dev_' + d.key];
         if (!de) return;
-        set(de, 'pwr', d.off ? 'brak' : fmtW(d.power));
-        set(de, 'kwh', d.off ? '—' : fmtKwh(d.energy));
+        set(de, 'pwr', d.unset ? '—' : d.off ? 'brak' : fmtW(d.power));
+        set(de, 'kwh', d.off && !d.unset ? '—' : fmtKwh(d.energy));
         flags(de, d.off, !d.off && d.idle);
         nodes['dev_' + d.key] = {
           label: d.name,
-          entityId: d.powerEntity || '—',
+          entityId: entityLabel(d.powerEntity || d.energyEntity),
           icon: d.icon,
           accent: 'cons',
           power: d.power,
           energy: d.energy,
           off: d.off,
-          powerEntities: [d.powerEntity].filter(Boolean),
-          energyEntities: [d.energyEntity].filter(Boolean)
+          powerEntities: asList(d.powerEntity),
+          energyEntities: asList(d.energyEntity)
         };
       });
     });

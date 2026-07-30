@@ -143,7 +143,46 @@ groups:
 ```
 
 Encja `energy` jest opcjonalna — bez niej urządzenie pokazuje `—` w kolumnie energii, a słupki
-w oknie historii są liczone przez całkowanie mocy.
+w oknie historii są liczone przez całkowanie mocy. Urządzenie z samą encją `energy` nie jest
+traktowane jako awaria: pokazuje `—` w kolumnie mocy i nie jest wygaszane.
+
+### Listy encji
+
+Każde pole encji (`power`, `energy`, `energy_import`, …) przyjmuje pojedyncze id albo listę — wtedy
+wartości są sumowane, a encje niedostępne pomijane:
+
+```yaml
+- name: Gniazdka Sonoff
+  energy:
+    - sensor.sonoff_dual_r3_1_energy_1_daily
+    - sensor.sonoff_dual_r3_1_energy_2_daily
+```
+
+Listy edytuje się w widoku YAML — edytor GUI pokazuje je tylko do odczytu, żeby ich nie nadpisać.
+
+### Odwracanie znaku
+
+`invert: true` działa w `grid`, `battery`, `house`, `solar` (dziedziczone przez stringi) oraz
+w pojedynczej grupie i urządzeniu. Przydaje się np. przy integracji Fronius, która raportuje zużycie
+domu wartością ujemną.
+
+### Migracja z `sunsynk-power-flow-card`
+
+Gotowy przykład portu (Fronius Symo + Smart Meter + Sonoff/Shelly) leży w
+[examples/fronius-sunsynk-port.yaml](examples/fronius-sunsynk-port.yaml).
+
+| sunsynk-power-flow-card | Energy Flow Card |
+|---|---|
+| `pv1_power_186`, `pv2_power_187` | `solar.strings[].power` |
+| `pv_total`, `day_pv_energy_108` | `solar.power`, `solar.energy` |
+| `grid_ct_power_172` + `grid.invert_power` | `grid.power` + `grid.invert` |
+| `day_grid_import_76` / `day_grid_export_77` | `grid.energy_import` / `grid.energy_export` |
+| `essential_power`, `day_load_energy_84` | `house.power`, `house.energy` |
+| `essential_load1..4` + `load1_name` | `groups[].devices[]` (lista encji dozwolona) |
+| `dynamic_line_width`, `animation_speed` | zawsze dynamiczne — pochodne mocy |
+| `decimal_places`, `large_font` | stałe formatowanie wg polskiej lokalizacji |
+| `card_height`, `card_width`, `wide` | `grid_options` Home Assistanta |
+| `autarky: power` | wskaźnik samowystarczalności w węźle domu |
 
 ### Dostępne ikony
 

@@ -213,6 +213,51 @@ ok(card2.shadowRoot.querySelector('.gridwrap').classList.contains('hidden'), 'br
 ok(card2.shadowRoot.textContent.includes('brak'), 'nieistniejąca encja pokazuje „brak"');
 ok(card2._m.house.power === 0, 'moc domu = 0 bez odczytów');
 
+console.log('\n— listy encji, invert, brak pomiaru mocy —');
+const hass3 = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.load_consumed', -2148, 'W'), // Fronius raportuje zużycie ujemnie
+    S('sensor.meter_p', -6200, 'W'), // dodatnie = eksport → wymaga invert
+    S('sensor.s1', 0.5, 'kWh'),
+    S('sensor.s2', 1.5, 'kWh'),
+    S('sensor.s3', 'unavailable', 'kWh'),
+    S('sensor.p1', 300, 'W'),
+    S('sensor.p2', 700, 'W')
+  ]),
+  callWS: async () => ({})
+};
+const card3 = document.createElement('energy-flow-card');
+card3.setConfig({
+  type: 'custom:energy-flow-card',
+  grid: { power: 'sensor.meter_p', invert: true },
+  house: { power: 'sensor.load_consumed', invert: true },
+  groups: [
+    {
+      name: 'Sonoff',
+      devices: [
+        { name: 'Zestaw 1', energy: ['sensor.s1', 'sensor.s2', 'sensor.s3'] },
+        { name: 'Zestaw 2', power: ['sensor.p1', 'sensor.p2'], energy: 'sensor.s1' }
+      ]
+    }
+  ]
+});
+document.body.appendChild(card3);
+card3._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+card3.hass = hass3;
+await new Promise((r) => setTimeout(r, 30));
+const g3 = card3._m.groups[0];
+ok(card3._m.house.power === 2148, `invert domu: ${card3._m.house.power} W (oczek. 2148)`);
+ok(card3._m.grid.power === 6200, `invert sieci: ${card3._m.grid.power} W (oczek. 6200)`);
+ok(card3.shadowRoot.textContent.includes('Pobór z sieci'), 'po invert kierunek sieci = pobór');
+ok(Math.abs(g3.devices[0].energy - 2) < 0.001, `suma listy energii z pominięciem niedostępnej: ${g3.devices[0].energy} kWh`);
+ok(g3.devices[0].unset === true && g3.devices[0].off === false, 'urządzenie bez encji mocy nie jest wygaszone');
+ok(g3.devices[1].power === 1000, `suma listy mocy: ${g3.devices[1].power} W`);
+ok(g3.power === 1000, `moc grupy z listy: ${g3.power} W`);
+ok(card3._nodes['dev_d0_0'].energyEntities.length === 3, 'modal dostaje wszystkie encje z listy');
+ok(card3._nodes['dev_d0_1'].entityId === '2 encji · suma', `podpis listy: ${card3._nodes['dev_d0_1'].entityId}`);
+ok(card3.shadowRoot.querySelector('[data-node="dev_d0_0"]').getAttribute('data-off') === null, 'brak data-off przy samym liczniku energii');
+
 console.log('\n— edytor —');
 const ed = document.createElement('energy-flow-card-editor');
 let emitted = null;
