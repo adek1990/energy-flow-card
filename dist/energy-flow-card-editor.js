@@ -75,8 +75,10 @@ class EnergyFlowCardEditor extends HTMLElement {
 
   setConfig(config) {
     const incoming = JSON.stringify(config);
+    /* echo naszej własnej zmiany — zachowaj bieżący graf obiektów i nie przebudowuj DOM,
+       inaczej edycje w polach tekstowych trafiałyby do porzuconej kopii konfiguracji */
+    if (this._emitted === incoming && this._built) return;
     this._config = clone(config) || {};
-    if (this._emitted === incoming && this._built) return; /* nasza własna zmiana — nie przebudowuj */
     this._emitted = incoming;
     this._render();
   }

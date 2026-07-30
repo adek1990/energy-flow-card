@@ -1,0 +1,14 @@
+{
+  "name": "energy-flow-card",
+  "version": "1.0.0",
+  "description": "Schematyczna karta rozpływu energii dla Home Assistanta",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/smoke.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

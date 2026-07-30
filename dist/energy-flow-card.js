@@ -536,10 +536,9 @@ class EnergyFlowCard extends HTMLElement {
   /* -------------------------------------------------------------- hass */
 
   set hass(hass) {
-    const first = !this._hass;
     this._hass = hass;
     if (!this._cfg) return;
-    if (first) this._build();
+    if (!this._built) this._build();
     this._update();
     if (this._modal) this._syncModalHeader();
   }

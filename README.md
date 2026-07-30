@@ -181,6 +181,16 @@ normalnie także w jego popupach.
 | Brak edytora GUI | `energy-flow-card-editor.js` nie leży obok `energy-flow-card.js` |
 | Linie nie trafiają w węzły | Karta mierzy pudełka DOM — przeładuj widok po zmianie układu (Ctrl+F5) |
 
+## Testy
+
+W repozytorium jest test dymny uruchamiany w Node z jsdom — sprawdza model danych, normalizację
+jednostek, polskie odmiany, generowanie łączników SVG, tryb mobilny, okno historii i edytor:
+
+```bash
+npm install
+npm test
+```
+
 ## Licencja
 
 MIT

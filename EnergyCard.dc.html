@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@keyframes dcflow { to { stroke-dashoffset: -34; } }
+[data-off="true"] { opacity: .42; filter: saturate(.15); border-style: dashed !important; }
+[data-idle="true"] { opacity: .62; }
+</style>
+</helmet>
+<div ref="{{ cardRef }}" style="position:relative;width:100%;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;color:var(--tx);padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--card);box-sizing:border-box">
+  <svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0">
+    <defs>
+      <symbol id="ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"></circle><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 2.6v2.4M12 19v2.4M2.6 12h2.4M19 12h2.4M5.4 5.4l1.7 1.7M16.9 16.9l1.7 1.7M18.6 5.4l-1.7 1.7M7.1 16.9l-1.7 1.7"></path></g></symbol>
+      <symbol id="ic-panel" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 5h17l2 9h-21z"></path><path d="M12 5v9M5.6 9.5h12.8"></path><path d="M12 14v5.5M8.5 19.5h7"></path></g></symbol>
+      <symbol id="ic-house" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 10.6 12 3.8l8.5 6.8V20a.9.9 0 0 1-.9.9H4.4a.9.9 0 0 1-.9-.9z"></path><path d="M9.6 20.9v-6.3h4.8v6.3"></path></g></symbol>
+      <symbol id="ic-tower" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6.5 21 9 3h6l2.5 18"></path><path d="M3.5 6.2h17M7.6 10.4h8.8M6.9 15h10.2"></path><path d="m8.6 10.4 6.8 10.6M15.4 10.4 8.6 21"></path></g></symbol>
+      <symbol id="ic-battery" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.4" y="7.2" width="15.4" height="9.6" rx="2.2"></rect><path d="M20.6 10.5v3"></path><path d="m10.6 9.6-1.8 3.2h2.4l-1.4 2.4"></path></g></symbol>
+      <symbol id="ic-climate" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"></path><path d="M9.4 4.8 12 7.2l2.6-2.4M9.4 19.2 12 16.8l2.6 2.4"></path></g></symbol>
+      <symbol id="ic-stove" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.6" y="4.4" width="16.8" height="15.2" rx="2"></rect><path d="M3.6 9.6h16.8"></path><circle cx="8.4" cy="7" r="1"></circle><circle cx="12" cy="7" r="1"></circle><path d="M8 13.2h8v3.4H8z"></path></g></symbol>
+      <symbol id="ic-washer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="3.4" width="16" height="17.2" rx="2.2"></rect><path d="M4 8h16"></path><circle cx="12" cy="14.4" r="3.6"></circle><circle cx="7.4" cy="5.7" r=".9"></circle></g></symbol>
+      <symbol id="ic-car" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.2 15.4v-2.2l2-5.2A2 2 0 0 1 7.1 6.7h9.8a2 2 0 0 1 1.9 1.3l2 5.2v2.2"></path><path d="M3.2 15.4h17.6v2.4H3.2z"></path><path d="M5.4 12.4h13.2"></path><path d="M6.4 17.8v1.6M17.6 17.8v1.6"></path></g></symbol>
+      <symbol id="ic-bulb" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8.4 13.6a4.6 4.6 0 1 1 7.2 0c-.9 1.1-1.4 1.9-1.5 3H9.9c-.1-1.1-.6-1.9-1.5-3z"></path><path d="M10 19.6h4M10.7 21.8h2.6"></path></g></symbol>
+      <symbol id="ic-tv" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2.8" y="4.4" width="18.4" height="12" rx="2"></rect><path d="M8.4 19.8h7.2"></path></g></symbol>
+      <symbol id="ic-water" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.2s6 6.5 6 10.4a6 6 0 0 1-12 0C6 9.7 12 3.2 12 3.2z"></path></g></symbol>
+      <symbol id="ic-server" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.4" y="4" width="17.2" height="6.4" rx="1.6"></rect><rect x="3.4" y="13.6" width="17.2" height="6.4" rx="1.6"></rect><path d="M6.6 7.2h.01M6.6 16.8h.01M17.4 7.2h-3M17.4 16.8h-3"></path></g></symbol>
+      <symbol id="ic-plug" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7.4 3.6v5M16.6 3.6v5"></path><path d="M5 8.6h14v2.6a7 7 0 0 1-14 0z"></path><path d="M12 18.2v2.6"></path></g></symbol>
+      <symbol id="ic-fan" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><circle cx="12" cy="12" r="2"></circle><path d="M12 10c0-3.4-1-6.6 2.4-6.6 2.6 0 2.6 4-2.4 6.6M14 12c3.4 0 6.6-1 6.6 2.4 0 2.6-4 2.6-6.6-2.4M10 12c-3.4 0-6.6 1-6.6-2.4C3.4 7 7.4 7 10 12M12 14c0 3.4 1 6.6-2.4 6.6-2.6 0-2.6-4 2.4-6.6"></path></g></symbol>
+    </defs>
+    <g id="layer-flows-idle">
+      <sc-for list="{{ links }}" as="l" hint-placeholder-count="5">
+        <path d="{{ l.d }}" fill="none" stroke="{{ l.color }}" stroke-width="{{ l.baseW }}" stroke-linecap="round" opacity="{{ l.baseOpacity }}" stroke-dasharray="{{ l.baseDash }}"></path>
+      </sc-for>
+    </g>
+    <g id="layer-flows-active">
+      <sc-for list="{{ activeLinks }}" as="l" hint-placeholder-count="4">
+        <path d="{{ l.d }}" fill="none" stroke-width="{{ l.w }}" stroke-linecap="round" stroke-dasharray="7 13" style="{{ l.style }}"></path>
+      </sc-for>
+    </g>
+  </svg>
+
+  <div style="{{ gridStyle }}">
+    <sc-if value="{{ showStrings }}" hint-placeholder-val="{{ true }}">
+    <div style="{{ stringsStyle }}">
+      <sc-for list="{{ strings }}" as="s" hint-placeholder-count="3">
+        <div ref="{{ s.ref }}" data-off="{{ s.off }}" data-idle="{{ s.idle }}" onClick="{{ s.onClick }}" onMouseEnter="{{ s.onEnter }}" onMouseMove="{{ s.onEnter }}" onMouseLeave="{{ s.onLeave }}" style="position:relative;z-index:1;display:flex;gap:9px;align-items:center;padding:9px 11px;border:1px solid var(--line);border-radius:13px;background:var(--panel);cursor:pointer;box-shadow:0 1px 2px var(--sh);transition:border-color .15s,transform .15s" style-hover="border-color:var(--solar);transform:translateY(-1px)">
+          <svg width="20" height="20" viewBox="0 0 24 24" style="color:var(--solar);flex:none"><use href="{{ s.icon }}"></use></svg>
+          <div style="min-width:0">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);white-space:nowrap">{{ s.label }}</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:5px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--solar);border:1px solid color-mix(in oklab,var(--solar) 48%,transparent);background:color-mix(in oklab,var(--solar) 12%,transparent);border-radius:7px;padding:3px 7px;white-space:nowrap">{{ s.pwr }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut);white-space:nowrap">{{ s.kwh }}</span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ hasSolar }}" hint-placeholder-val="{{ true }}">
+      <div style="grid-area:sum;display:flex;flex-direction:column;align-items:center;gap:6px">
+        <div ref="{{ sum.ref }}" onClick="{{ sum.onClick }}" onMouseEnter="{{ sum.onEnter }}" onMouseMove="{{ sum.onEnter }}" onMouseLeave="{{ sum.onLeave }}" data-idle="{{ sum.idle }}" style="position:relative;z-index:1;display:flex;gap:10px;align-items:center;padding:10px 13px;border:1px solid color-mix(in oklab,var(--solar) 40%,var(--line));border-radius:13px;background:var(--panel);cursor:pointer;box-shadow:0 1px 2px var(--sh)" style-hover="border-color:var(--solar)">
+          <svg width="22" height="22" viewBox="0 0 24 24" style="color:var(--solar);flex:none"><use href="{{ sum.icon }}"></use></svg>
+          <div>
+            <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)">{{ sum.label }}</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:5px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:var(--solar);border:1px solid color-mix(in oklab,var(--solar) 48%,transparent);background:color-mix(in oklab,var(--solar) 14%,transparent);border-radius:8px;padding:3px 8px">{{ sum.pwr }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut)">{{ sum.kwh }}</span>
+            </div>
+          </div>
+        </div>
+        <sc-if value="{{ showStringList }}" hint-placeholder-val="{{ false }}">
+          <div style="width:100%;border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden">
+            <div onClick="{{ toggleStrings }}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer">
+              <div style="flex:1;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)">{{ stringsMeta }}</div>
+              <span style="font-size:10px;color:var(--mut)">{{ stringsChev }}</span>
+            </div>
+            <sc-if value="{{ stringsOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:4px 10px 8px 20px;border-top:1px solid var(--line);display:flex;flex-direction:column">
+                <sc-for list="{{ strings }}" as="s" hint-placeholder-count="3">
+                  <div data-off="{{ s.off }}" data-idle="{{ s.idle }}" onClick="{{ s.onClick }}" onMouseEnter="{{ s.onEnter }}" onMouseLeave="{{ s.onLeave }}" style="display:flex;align-items:center;gap:7px;padding:5px 4px 5px 9px;border-left:1px solid var(--line);cursor:pointer">
+                    <svg width="14" height="14" viewBox="0 0 24 24" style="color:var(--solar);flex:none;opacity:.85"><use href="{{ s.icon }}"></use></svg>
+                    <div style="flex:1;min-width:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.label }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:var(--solar)">{{ s.pwr }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mut);min-width:44px;text-align:right">{{ s.kwh }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <div style="grid-area:hub;display:flex;justify-content:center;align-items:center">
+      <div ref="{{ hub.ref }}" onClick="{{ hub.onClick }}" onMouseEnter="{{ hub.onEnter }}" onMouseMove="{{ hub.onEnter }}" onMouseLeave="{{ hub.onLeave }}" style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 20px;border:1px solid color-mix(in oklab,var(--cons) 34%,var(--line));border-radius:20px;background:var(--panel);cursor:pointer;box-shadow:0 2px 10px var(--sh)" style-hover="border-color:var(--cons)">
+        <svg width="30" height="30" viewBox="0 0 24 24" style="color:var(--cons)"><use href="{{ hub.icon }}"></use></svg>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)">{{ hub.label }}</div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;color:var(--cons);border:1px solid color-mix(in oklab,var(--cons) 48%,transparent);background:color-mix(in oklab,var(--cons) 13%,transparent);border-radius:9px;padding:4px 10px">{{ hub.pwr }}</span>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut)">{{ hub.kwh }}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;color:var(--solar)">{{ hub.selfSuff }}</div>
+      </div>
+    </div>
+
+    <div style="grid-area:gridn;display:flex;justify-content:center;align-items:center">
+      <div ref="{{ grid.ref }}" data-off="{{ grid.off }}" data-idle="{{ grid.idle }}" onClick="{{ grid.onClick }}" onMouseEnter="{{ grid.onEnter }}" onMouseMove="{{ grid.onEnter }}" onMouseLeave="{{ grid.onLeave }}" style="position:relative;z-index:1;display:flex;gap:10px;align-items:center;padding:11px 13px;border:1px solid color-mix(in oklab,var(--grid) 34%,var(--line));border-radius:14px;background:var(--panel);cursor:pointer;box-shadow:0 1px 2px var(--sh)" style-hover="border-color:var(--grid)">
+        <svg width="24" height="24" viewBox="0 0 24 24" style="color:var(--grid);flex:none"><use href="{{ grid.icon }}"></use></svg>
+        <div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)">{{ grid.label }}</div>
+          <div style="display:flex;gap:7px;align-items:center;margin-top:5px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--grid);border:1px solid color-mix(in oklab,var(--grid) 48%,transparent);background:color-mix(in oklab,var(--grid) 13%,transparent);border-radius:8px;padding:3px 8px;white-space:nowrap">{{ grid.pwr }}</span>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut);margin-top:5px">{{ grid.kwh }}</div>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ hasBattery }}" hint-placeholder-val="{{ true }}">
+      <div style="grid-area:batt;display:flex;justify-content:center;align-items:center">
+        <div ref="{{ batt.ref }}" data-idle="{{ batt.idle }}" onClick="{{ batt.onClick }}" onMouseEnter="{{ batt.onEnter }}" onMouseMove="{{ batt.onEnter }}" onMouseLeave="{{ batt.onLeave }}" style="position:relative;z-index:1;display:flex;gap:10px;align-items:center;padding:10px 13px;border:1px solid color-mix(in oklab,var(--batt) 34%,var(--line));border-radius:14px;background:var(--panel);cursor:pointer;box-shadow:0 1px 2px var(--sh)" style-hover="border-color:var(--batt)">
+          <svg width="24" height="24" viewBox="0 0 24 24" style="color:var(--batt);flex:none"><use href="{{ batt.icon }}"></use></svg>
+          <div>
+            <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)">{{ batt.label }}</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:5px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--batt);border:1px solid color-mix(in oklab,var(--batt) 48%,transparent);background:color-mix(in oklab,var(--batt) 13%,transparent);border-radius:8px;padding:3px 8px;white-space:nowrap">{{ batt.pwr }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--mut)">{{ batt.kwh }}</span>
+            </div>
+            <div style="margin-top:7px;height:4px;border-radius:3px;background:color-mix(in oklab,var(--batt) 18%,transparent);overflow:hidden">
+              <div style="{{ batt.socStyle }}"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="grid-area:consumers;display:flex;flex-direction:column;justify-content:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;padding:0 2px">
+        <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mut)">Consumers · {{ deviceLabel }}</div>
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+        <div onClick="{{ toggleAll }}" style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--cons);cursor:pointer;padding:3px 7px;border:1px solid color-mix(in oklab,var(--cons) 34%,transparent);border-radius:6px">{{ toggleAllLabel }}</div>
+      </div>
+      <div style="{{ groupsStyle }}">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+          <div ref="{{ g.ref }}" data-off="{{ g.off }}" data-idle="{{ g.idle }}" style="position:relative;z-index:1;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:0 1px 2px var(--sh);align-self:start;width:100%;box-sizing:border-box">
+            <div onClick="{{ g.onToggle }}" onMouseEnter="{{ g.onEnter }}" onMouseMove="{{ g.onEnter }}" onMouseLeave="{{ g.onLeave }}" style="display:flex;gap:9px;align-items:center;padding:9px 10px;cursor:pointer;border-radius:13px" style-hover="background:color-mix(in oklab,var(--cons) 7%,transparent)">
+              <svg width="19" height="19" viewBox="0 0 24 24" style="color:var(--cons);flex:none"><use href="{{ g.icon }}"></use></svg>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.label }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mut);margin-top:3px">{{ g.meta }}</div>
+              </div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--cons);border:1px solid color-mix(in oklab,var(--cons) 45%,transparent);background:color-mix(in oklab,var(--cons) 11%,transparent);border-radius:7px;padding:3px 6px;white-space:nowrap">{{ g.pwr }}</span>
+              <span style="font-size:10px;color:var(--mut);width:9px;text-align:center">{{ g.chev }}</span>
+            </div>
+            <sc-if value="{{ g.open }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:6px 10px 9px 20px;border-top:1px solid var(--line);display:flex;flex-direction:column">
+                <sc-for list="{{ g.devices }}" as="d" hint-placeholder-count="3">
+                  <div data-off="{{ d.off }}" data-idle="{{ d.idle }}" onClick="{{ d.onClick }}" onMouseEnter="{{ d.onEnter }}" onMouseMove="{{ d.onEnter }}" onMouseLeave="{{ d.onLeave }}" style="display:flex;align-items:center;gap:7px;padding:5px 6px 5px 9px;border-left:1px solid var(--line);cursor:pointer" style-hover="background:color-mix(in oklab,var(--cons) 8%,transparent)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" style="color:var(--cons);flex:none;opacity:.85"><use href="{{ d.icon }}"></use></svg>
+                    <div style="flex:1;min-width:0;font-size:11px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.label }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:var(--cons);white-space:nowrap">{{ d.pwr }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mut);white-space:nowrap;min-width:44px;text-align:right">{{ d.kwh }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1500,&quot;height&quot;:760},&quot;model&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;EnergyModel&quot;},&quot;expanded&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Record&lt;string,boolean&gt;&quot;},&quot;animate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;onNodeClick&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(e:Entity)=&gt;void&quot;},&quot;onHover&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(h:any)=&gt;void&quot;},&quot;onToggle&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(id:string)=&gt;void&quot;},&quot;onToggleAll&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(open:boolean)=&gt;void&quot;}}">
+const ICONS = {sun:'ic-sun',panel:'ic-panel',house:'ic-house',tower:'ic-tower',battery:'ic-battery',climate:'ic-climate',stove:'ic-stove',washer:'ic-washer',car:'ic-car',bulb:'ic-bulb',tv:'ic-tv',water:'ic-water',server:'ic-server',plug:'ic-plug',fan:'ic-fan'};
+
+function fmtW(w) {
+  if (w === null || w === undefined) return '—';
+  const a = Math.abs(w);
+  if (a >= 1000000) return (w / 1000000).toFixed(2) + ' MW';
+  if (a >= 1000) return (w / 1000).toFixed(a >= 10000 ? 1 : 2) + ' kW';
+  return Math.round(w) + ' W';
+}
+function fmtKwh(k) {
+  if (k === null || k === undefined) return '—';
+  if (Math.abs(k) >= 1000) return (k / 1000).toFixed(2) + ' MWh';
+  return k.toFixed(Math.abs(k) < 10 ? 2 : 1) + ' kWh';
+}
+
+class Component extends DCLogic {
+  els = {};
+  state = { links: [], w: 1200, stringsOpen: false };
+
+  cardRef = (el) => {
+    this.card = el;
+    if (el && !this.ro) {
+      this.ro = new ResizeObserver(() => this.measure());
+      this.ro.observe(el);
+    }
+  };
+  ref(id) {
+    this._refs = this._refs || {};
+    if (!this._refs[id]) this._refs[id] = (el) => { if (el) this.els[id] = el; else delete this.els[id]; };
+    return this._refs[id];
+  }
+  componentDidMount() { this.measure(); this._t = setInterval(() => this.measure(), 900); }
+  componentWillUnmount() { if (this.ro) this.ro.disconnect(); clearInterval(this._t); }
+  componentDidUpdate() { this.measure(); }
+
+  rect(id) {
+    const el = this.els[id], host = this.card;
+    if (!el || !host) return null;
+    const a = el.getBoundingClientRect(), b = host.getBoundingClientRect();
+    return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height, cx: a.left - b.left + a.width / 2, cy: a.top - b.top + a.height / 2 };
+  }
+
+  path(a, b) {
+    const dx = b.cx - a.cx, dy = b.cy - a.cy;
+    if (Math.abs(dx) > Math.abs(dy) * 1.05) {
+      const x1 = dx > 0 ? a.x + a.w : a.x, x2 = dx > 0 ? b.x : b.x + b.w;
+      const o = Math.max(24, Math.abs(x2 - x1) * 0.45) * (dx > 0 ? 1 : -1);
+      return `M ${x1} ${a.cy} C ${x1 + o} ${a.cy}, ${x2 - o} ${b.cy}, ${x2} ${b.cy}`;
+    }
+    const y1 = dy > 0 ? a.y + a.h : a.y, y2 = dy > 0 ? b.y : b.y + b.h;
+    const o = Math.max(20, Math.abs(y2 - y1) * 0.5) * (dy > 0 ? 1 : -1);
+    return `M ${a.cx} ${y1} C ${a.cx} ${y1 + o}, ${b.cx} ${y2 - o}, ${b.cx} ${y2}`;
+  }
+
+  linkDefs() {
+    const m = this.props.model || {}, out = [];
+    const off = (n) => n && n.state === 'unavailable';
+    if (m.solar) {
+      if (this.state.w >= 720) (m.solar.strings || []).forEach((s) => out.push({ a: s.id, b: 'solar-sum', p: off(s) ? 0 : s.power, c: 'solar', dead: off(s) }));
+      out.push({ a: 'solar-sum', b: 'hub', p: m.solar.power, c: 'solar' });
+    }
+    if (m.grid) {
+      const p = off(m.grid) ? 0 : m.grid.power;
+      if (p >= 0) out.push({ a: 'grid', b: 'hub', p, c: 'grid', dead: off(m.grid) });
+      else out.push({ a: 'hub', b: 'grid', p: -p, c: 'solar' });
+    }
+    if (m.battery) {
+      const p = m.battery.power;
+      if (p >= 0) out.push({ a: 'hub', b: 'batt', p, c: 'batt' });
+      else out.push({ a: 'batt', b: 'hub', p: -p, c: 'batt' });
+    }
+    (m.groups || []).forEach((g) => {
+      const sum = g.devices.reduce((t, d) => t + (d.state === 'unavailable' ? 0 : d.power), 0);
+      out.push({ a: 'hub', b: 'grp-' + g.id, p: sum, c: 'cons' });
+    });
+    return out;
+  }
+
+  measure() {
+    if (!this.card) return;
+    const links = [];
+    this.linkDefs().forEach((L, i) => {
+      const a = this.rect(L.a), b = this.rect(L.b);
+      if (!a || !b) return;
+      const p = Math.max(0, L.p || 0), idle = L.dead || p < 15;
+      links.push({
+        id: i, d: this.path(a, b), color: 'var(--' + L.c + ')', idle,
+        baseW: idle ? 1 : Math.min(5.5, 1.2 + Math.sqrt(p) / 20),
+        baseOpacity: idle ? 0.28 : 0.22,
+        baseDash: idle ? '3 6' : 'none',
+        w: Math.min(5.5, 1.2 + Math.sqrt(p) / 20),
+        dur: Math.max(0.55, Math.min(5, 2400 / (p + 160))).toFixed(2) + 's',
+        p
+      });
+    });
+    const w = this.card.getBoundingClientRect().width;
+    const sig = JSON.stringify(links) + '|' + Math.round(w);
+    if (sig !== this._sig) { this._sig = sig; this.setState({ links, w }); }
+  }
+
+  node(id, o) {
+    const cb = this.props.onNodeClick, hv = this.props.onHover;
+    return Object.assign({
+      ref: this.ref(id),
+      onClick: () => cb && cb(o.entity),
+      onEnter: (e) => hv && hv({ x: e.clientX, y: e.clientY, node: o.entity }),
+      onLeave: () => hv && hv(null)
+    }, o);
+  }
+
+  renderVals() {
+    const m = this.props.model || { groups: [] };
+    const narrow = this.state.w < 720;
+    const expanded = this.props.expanded || {};
+    const anim = this.props.animate !== false;
+    const links = this.state.links;
+
+    const ent = (o, kind, accent) => ({ id: o.id, label: o.label, power: o.power, energy: o.energy, kind, accent, off: o.state === 'unavailable', icon: o.icon });
+
+    const strings = ((m.solar && m.solar.strings) || []).map((s) => this.node(s.id, {
+      label: s.label, pwr: s.state === 'unavailable' ? 'unavailable' : fmtW(s.power), kwh: s.state === 'unavailable' ? '—' : fmtKwh(s.energy),
+      icon: '#' + ICONS[s.icon || 'panel'], off: s.state === 'unavailable' ? 'true' : null,
+      idle: s.state !== 'unavailable' && s.power < 15 ? 'true' : null, entity: ent(s, 'solar', 'solar')
+    }));
+
+    const solarSum = m.solar ? this.node('solar-sum', {
+      label: m.solar.label || 'Solar total', pwr: fmtW(m.solar.power), kwh: fmtKwh(m.solar.energy),
+      icon: '#ic-sun', idle: m.solar.power < 15 ? 'true' : null,
+      entity: { id: 'solar_total', label: m.solar.label || 'Solar total', power: m.solar.power, energy: m.solar.energy, kind: 'solar', accent: 'solar', icon: 'sun' }
+    }) : {};
+
+    const consTotal = (m.groups || []).reduce((t, g) => t + g.devices.reduce((u, d) => u + (d.state === 'unavailable' ? 0 : d.power), 0), 0);
+    const consEnergy = (m.groups || []).reduce((t, g) => t + g.devices.reduce((u, d) => u + (d.energy || 0), 0), 0);
+    const solarP = m.solar ? m.solar.power : 0;
+    const gridImport = m.grid && m.grid.power > 0 ? m.grid.power : 0;
+    const selfPct = consTotal > 0 ? Math.round(100 * Math.max(0, consTotal - gridImport) / consTotal) : 100;
+
+    const hub = this.node('hub', {
+      label: m.hubLabel || 'House', pwr: fmtW(consTotal), kwh: fmtKwh(consEnergy), icon: '#ic-house',
+      selfSuff: selfPct + '% self-sufficient',
+      entity: { id: 'house_total', label: m.hubLabel || 'House consumption', power: consTotal, energy: consEnergy, kind: 'cons', accent: 'cons', icon: 'house' }
+    });
+
+    const g0 = m.grid || { label: 'Grid', power: 0, energy: 0 };
+    const grid = this.node('grid', {
+      label: g0.state === 'unavailable' ? 'Grid · unavailable' : (g0.power >= 0 ? 'Grid import' : 'Grid export'),
+      pwr: g0.state === 'unavailable' ? 'unavailable' : fmtW(Math.abs(g0.power)),
+      kwh: g0.state === 'unavailable' ? '—' : '↓ ' + fmtKwh(g0.energy) + '   ↑ ' + fmtKwh(g0.energyExport || 0),
+      icon: '#ic-tower', off: g0.state === 'unavailable' ? 'true' : null,
+      idle: g0.state !== 'unavailable' && Math.abs(g0.power) < 15 ? 'true' : null,
+      entity: ent(Object.assign({ icon: 'tower' }, g0), 'grid', 'grid')
+    });
+
+    const b0 = m.battery;
+    const batt = b0 ? this.node('batt', {
+      label: b0.power >= 0 ? 'Battery charging' : 'Battery discharging',
+      pwr: fmtW(Math.abs(b0.power)), kwh: (b0.soc != null ? b0.soc + '% · ' : '') + fmtKwh(b0.energy),
+      icon: '#ic-battery', idle: Math.abs(b0.power) < 15 ? 'true' : null,
+      socStyle: { width: (b0.soc || 0) + '%', height: '100%', background: 'var(--batt)', borderRadius: '3px' },
+      entity: ent(Object.assign({ icon: 'battery' }, b0), 'batt', 'batt')
+    }) : {};
+
+    const groups = (m.groups || []).map((g) => {
+      const on = g.devices.filter((d) => d.state !== 'unavailable' && d.power >= 5).length;
+      const sum = g.devices.reduce((t, d) => t + (d.state === 'unavailable' ? 0 : d.power), 0);
+      const nrg = g.devices.reduce((t, d) => t + (d.energy || 0), 0);
+      const open = !!expanded[g.id];
+      const hv = this.props.onHover, cb = this.props.onNodeClick;
+      return {
+        ref: this.ref('grp-' + g.id), label: g.label, icon: '#' + ICONS[g.icon || 'plug'],
+        pwr: fmtW(sum), meta: g.devices.length + ' devices · ' + on + ' active · ' + fmtKwh(nrg),
+        chev: open ? '▾' : '▸', open, idle: sum < 15 ? 'true' : null,
+        off: g.devices.every((d) => d.state === 'unavailable') ? 'true' : null,
+        onToggle: () => this.props.onToggle && this.props.onToggle(g.id),
+        onEnter: (e) => hv && hv({ x: e.clientX, y: e.clientY, node: { id: g.id, label: g.label, power: sum, energy: nrg, kind: 'cons', accent: 'cons', icon: g.icon, group: true, count: g.devices.length } }),
+        onLeave: () => hv && hv(null),
+        devices: g.devices.map((d) => ({
+          label: d.label, icon: '#' + ICONS[d.icon || 'plug'],
+          pwr: d.state === 'unavailable' ? 'n/a' : fmtW(d.power),
+          kwh: d.state === 'unavailable' ? '—' : fmtKwh(d.energy),
+          off: d.state === 'unavailable' ? 'true' : null,
+          idle: d.state !== 'unavailable' && d.power < 5 ? 'true' : null,
+          onClick: (e) => { e.stopPropagation(); cb && cb(ent(d, 'cons', 'cons')); },
+          onEnter: (e) => hv && hv({ x: e.clientX, y: e.clientY, node: ent(d, 'cons', 'cons') }),
+          onLeave: () => hv && hv(null)
+        }))
+      };
+    });
+
+    const totalDevices = (m.groups || []).reduce((t, g) => t + g.devices.length, 0);
+    const anyOpen = (m.groups || []).some((g) => expanded[g.id]);
+    const colMin = narrow ? 150 : (totalDevices > 18 ? 190 : 215);
+
+    return {
+      cardRef: this.cardRef, links,
+      activeLinks: anim ? links.filter((l) => !l.idle).map((l) => ({
+        id: l.id, d: l.d, w: l.w,
+        style: { color: l.color, stroke: l.color, animation: 'dcflow ' + l.dur + ' linear infinite', filter: 'drop-shadow(0 0 5px currentColor)' }
+      })) : [],
+      gridStyle: narrow ? {
+        position: 'relative', zIndex: 1, display: 'grid', gap: '26px 12px', gridTemplateColumns: '1fr',
+        gridTemplateAreas: '"strings" "sum" "hub" "gridn" "batt" "consumers"'
+      } : {
+        position: 'relative', zIndex: 1, display: 'grid', gap: '30px 46px',
+        gridTemplateColumns: 'minmax(200px,230px) minmax(210px,250px) minmax(320px,1fr)',
+        gridTemplateAreas: '"strings strings strings" "gridn sum consumers" "gridn hub consumers" "gridn batt consumers"',
+        gridTemplateRows: 'auto auto auto auto', alignItems: 'center'
+      },
+      stringsStyle: { gridArea: 'strings', display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'center', alignItems: 'flex-start' },
+      showStrings: !narrow && strings.length > 0,
+      showStringList: narrow && strings.length > 0,
+      stringsOpen: this.state.stringsOpen,
+      stringsChev: this.state.stringsOpen ? '▾' : '▸',
+      stringsMeta: strings.length + ' inverter strings' + (this.state.stringsOpen ? '' : ' · tap to expand'),
+      toggleStrings: () => this.setState((st) => ({ stringsOpen: !st.stringsOpen })),
+      groupsStyle: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(' + colMin + 'px,1fr))', gap: '10px', alignContent: 'start' },
+      strings, sum: solarSum, hub, grid, batt, groups,
+      hasSolar: !!m.solar, hasBattery: !!m.battery,
+      deviceLabel: totalDevices + ' devices in ' + (m.groups || []).length + ' groups',
+      toggleAllLabel: anyOpen ? 'Collapse all' : 'Expand all',
+      toggleAll: () => this.props.onToggleAll && this.props.onToggleAll(!anyOpen)
+    };
+  }
+}
+</script>
+</body>
+</html>
