@@ -149,6 +149,29 @@ Encja `energy` jest opcjonalna — bez niej urządzenie pokazuje `—` w kolumni
 w oknie historii są liczone przez całkowanie mocy. Urządzenie z samą encją `energy` nie jest
 traktowane jako awaria: pokazuje `—` w kolumnie mocy i nie jest wygaszane.
 
+### Kanały urządzenia (zagnieżdżenie)
+
+Urządzenie może mieć własne `devices:` — np. moduł dwukanałowy. Wiersz nadrzędny pokazuje **sumę**
+i rozwija kanały po kliknięciu; kanały mają własną moc, energię i historię:
+
+```yaml
+- name: Sonoff 9
+  icon: plug
+  expanded: true          # rozwinięte od razu
+  devices:
+    - name: Napowietrzanie stawu
+      power: sensor.sonoff_dual_r3_9_power_1
+      energy: sensor.sonoff_dual_r3_9_energy_1_daily
+    - name: Filtr
+      power: sensor.sonoff_dual_r3_9_power_2
+      energy: sensor.sonoff_dual_r3_9_energy_2_daily
+```
+
+Rodzic z własnym `power`/`energy` używa swoich encji; bez nich sumuje dzieci. Licznik urządzeń
+w nagłówku grupy liczy kanały, nie moduły, więc suma grupy nigdy nie jest podwojona. Kliknięcie
+wiersza modułu rozwija listę, kliknięcie kanału otwiera jego historię — okno historii modułu
+sumuje encje wszystkich kanałów.
+
 ### Listy encji
 
 Każde pole encji (`power`, `energy`, `energy_import`, …) przyjmuje pojedyncze id albo listę — wtedy
@@ -210,6 +233,9 @@ Liczby są formatowane wg polskiej lokalizacji (przecinek dziesiętny).
   dłuższych zakresów, `types: ['change']`). Jeśli encja nie ma statystyk długoterminowych, słupki są
   liczone przez całkowanie przebiegu mocy.
 - Zakres własny: kalendarz z polskimi nazwami miesięcy, tydzień od poniedziałku, wybór dwóch dat.
+- **Celownik pod kursorem** — pionowa linia z punktem na serii i wartością w danym momencie
+  (moc w W/kW z godziną, energia w kWh z datą słupka). Linia przyskakuje do najbliższej próbki,
+  więc punkt zawsze leży dokładnie na wykresie, a nie obok niego.
 
 Okno jest wbudowane w kartę i nie wymaga `browser_mod`; jeśli używasz `browser_mod`, karta działa
 normalnie także w jego popupach.

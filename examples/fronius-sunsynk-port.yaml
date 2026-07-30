@@ -73,91 +73,122 @@ groups:
         power: sensor.shellypro3em_fce8c0daec00_power
         energy: sensor.shellypro3em_fce8c0daec00_energy
 
-  # Każdy moduł Sonoff Dual R3 to osobny wiersz sumujący swoje dwa kanały.
-  # Nazwy zostawione numerami — zgadzają się z entity_id, łatwiej debugować.
+  # Każdy moduł Sonoff Dual R3 ma własny wiersz z SUMĄ obu kanałów,
+  # a po kliknięciu rozwija kanały jako osobne pozycje z własną mocą i energią.
+  # Nazwy „Kanał 1/2" możesz podmienić na opisowe (np. „Napowietrzanie stawu”).
   - name: Gniazdka Sonoff
     icon: plug
     devices:
       - name: Sonoff 1
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_1_power_1
-          - sensor.sonoff_dual_r3_1_power_2
-        energy:
-          - sensor.sonoff_dual_r3_1_energy_1_daily
-          - sensor.sonoff_dual_r3_1_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_1_power_1
+            energy: sensor.sonoff_dual_r3_1_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_1_power_2
+            energy: sensor.sonoff_dual_r3_1_energy_2_daily
       - name: Sonoff 2
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_2_power_1
-          - sensor.sonoff_dual_r3_2_power_2
-        energy:
-          - sensor.sonoff_dual_r3_2_energy_1_daily
-          - sensor.sonoff_dual_r3_2_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_2_power_1
+            energy: sensor.sonoff_dual_r3_2_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_2_power_2
+            energy: sensor.sonoff_dual_r3_2_energy_2_daily
       - name: Sonoff 4
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_4_power_1
-          - sensor.sonoff_dual_r3_4_power_2
-        energy:
-          - sensor.sonoff_dual_r3_4_energy_1_daily
-          - sensor.sonoff_dual_r3_4_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_4_power_1
+            energy: sensor.sonoff_dual_r3_4_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_4_power_2
+            energy: sensor.sonoff_dual_r3_4_energy_2_daily
       - name: Sonoff 5
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_5_power_1
-          - sensor.sonoff_dual_r3_5_power_2
-        energy:
-          - sensor.sonoff_dual_r3_5_energy_1_daily
-          - sensor.sonoff_dual_r3_5_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_5_power_1
+            energy: sensor.sonoff_dual_r3_5_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_5_power_2
+            energy: sensor.sonoff_dual_r3_5_energy_2_daily
       - name: Sonoff 8
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_8_power_1
-          - sensor.sonoff_dual_r3_8_power_2
-        energy:
-          - sensor.sonoff_dual_r3_8_energy_1_daily
-          - sensor.sonoff_dual_r3_8_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_8_power_1
+            energy: sensor.sonoff_dual_r3_8_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_8_power_2
+            energy: sensor.sonoff_dual_r3_8_energy_2_daily
       - name: Sonoff 9
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_9_power_1
-          - sensor.sonoff_dual_r3_9_power_2
-        energy:
-          - sensor.sonoff_dual_r3_9_energy_1_daily
-          - sensor.sonoff_dual_r3_9_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_9_power_1
+            energy: sensor.sonoff_dual_r3_9_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_9_power_2
+            energy: sensor.sonoff_dual_r3_9_energy_2_daily
       - name: Sonoff 10
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_10_power_1
-          - sensor.sonoff_dual_r3_10_power_2
-        energy:
-          - sensor.sonoff_dual_r3_10_energy_1_daily
-          - sensor.sonoff_dual_r3_10_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_10_power_1
+            energy: sensor.sonoff_dual_r3_10_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_10_power_2
+            energy: sensor.sonoff_dual_r3_10_energy_2_daily
       - name: Sonoff 11
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_11_power_1
-          - sensor.sonoff_dual_r3_11_power_2
-        energy:
-          - sensor.sonoff_dual_r3_11_energy_1_daily
-          - sensor.sonoff_dual_r3_11_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_11_power_1
+            energy: sensor.sonoff_dual_r3_11_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_11_power_2
+            energy: sensor.sonoff_dual_r3_11_energy_2_daily
       - name: Sonoff 12
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_12_power_1
-          - sensor.sonoff_dual_r3_12_power_2
-        energy:
-          - sensor.sonoff_dual_r3_12_energy_1_daily
-          - sensor.sonoff_dual_r3_12_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_12_power_1
+            energy: sensor.sonoff_dual_r3_12_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_12_power_2
+            energy: sensor.sonoff_dual_r3_12_energy_2_daily
       - name: Sonoff 13
         icon: plug
-        power:
-          - sensor.sonoff_dual_r3_13_power_1
-          - sensor.sonoff_dual_r3_13_power_2
-        energy:
-          - sensor.sonoff_dual_r3_13_energy_1_daily
-          - sensor.sonoff_dual_r3_13_energy_2_daily
+        devices:
+          - name: Kanał 1
+            icon: plug
+            power: sensor.sonoff_dual_r3_13_power_1
+            energy: sensor.sonoff_dual_r3_13_energy_1_daily
+          - name: Kanał 2
+            icon: plug
+            power: sensor.sonoff_dual_r3_13_power_2
+            energy: sensor.sonoff_dual_r3_13_energy_2_daily
 
 grid_options:
   columns: full

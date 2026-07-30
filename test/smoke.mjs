@@ -379,6 +379,67 @@ ok(card4.shadowRoot.textContent.includes('Sieć · brak encji'), 'nieistniejąca
 ok(card4._missing.has('sensor.nie_istnieje_wcale') && card4._missing.has('sensor.tez_nie_istnieje'), 'lista brakujących encji zebrana do ostrzeżenia');
 ok(card4._missing.has('sensor.jest_ale_niedostepny') === false, 'encja unavailable nie trafia na listę brakujących');
 
+console.log('\n— kanały modułu: osobno + suma —');
+const hass6 = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.k1_p', 120, 'W'),
+    S('sensor.k2_p', 80, 'W'),
+    S('sensor.k1_e', 1.2, 'kWh'),
+    S('sensor.k2_e', 0.8, 'kWh'),
+    S('sensor.inne_p', 500, 'W')
+  ]),
+  callWS: async () => ({})
+};
+const c6 = document.createElement('energy-flow-card');
+c6.setConfig({
+  type: 'custom:energy-flow-card',
+  groups: [
+    {
+      name: 'Gniazdka',
+      expanded: true,
+      devices: [
+        {
+          name: 'Napowietrzanie stawu',
+          icon: 'plug',
+          expanded: true,
+          devices: [
+            { name: 'Kanał 1', power: 'sensor.k1_p', energy: 'sensor.k1_e' },
+            { name: 'Kanał 2', power: 'sensor.k2_p', energy: 'sensor.k2_e' }
+          ]
+        },
+        { name: 'Inne', power: 'sensor.inne_p' }
+      ]
+    }
+  ]
+});
+document.body.appendChild(c6);
+c6._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+c6.hass = hass6;
+await new Promise((r) => setTimeout(r, 30));
+
+const mod = c6._m.groups[0].devices[0];
+ok(mod.power === 200, `moduł sumuje kanały: ${mod.power} W (oczek. 200)`);
+ok(Math.abs(mod.energy - 2) < 0.001, `moduł sumuje energię kanałów: ${mod.energy} kWh`);
+ok(mod.children.length === 2 && mod.children[0].power === 120, 'kanały widoczne osobno z własnymi wartościami');
+ok(c6._m.groups[0].power === 700, `grupa liczy moduł raz, bez podwajania: ${c6._m.groups[0].power} W (oczek. 700)`);
+ok(c6._m.groups[0].leafCount === 3, `liczone są kanały, nie moduły: ${c6._m.groups[0].leafCount} urządzeń`);
+ok(c6.shadowRoot.textContent.includes('3 urządzenia'), 'meta grupy podaje liczbę kanałów');
+
+const rowP = (k) => c6.shadowRoot.querySelector(`[data-node="dev_${k}"] [data-f="pwr"]`).textContent;
+ok(rowP('d0_0') === '200 W', `wiersz modułu pokazuje sumę: ${rowP('d0_0')}`);
+ok(rowP('d0_0_0') === '120 W' && rowP('d0_0_1') === '80 W', 'wiersze kanałów pokazują własną moc');
+const body = c6.shadowRoot.querySelector('[data-devbody="d0_0"]');
+ok(!!body && body.classList.contains('hidden') === false, 'expanded: true rozwija kanały od razu');
+c6.shadowRoot.querySelector('[data-devtoggle="d0_0"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(body.classList.contains('hidden'), 'klik w moduł zwija kanały');
+ok(!c6._modalHost, 'klik w moduł nie otwiera okna historii');
+c6.shadowRoot.querySelector('[data-node="dev_d0_0_0"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(!!c6._modalHost, 'klik w kanał otwiera historię');
+ok(c6._modalHost.textContent.includes('Kanał 1'), 'historia dotyczy klikniętego kanału');
+c6._closeModal();
+ok(c6._nodes['dev_d0_0'].powerEntities.length === 2, 'historia modułu sumuje encje obu kanałów');
+
 console.log('\n— edytor —');
 const ed = document.createElement('energy-flow-card-editor');
 let emitted = null;

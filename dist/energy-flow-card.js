@@ -284,6 +284,9 @@ const STYLES = `
 .dev .n { flex:1;min-width:0;font-size:11px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .dev .p { font-size:11px;font-weight:600;color:var(--cons);white-space:nowrap; }
 .dev .e { font-size:10px;color:var(--mut);white-space:nowrap;min-width:44px;text-align:right; }
+.dev-chev { font-size:10px;color:var(--mut);width:9px;text-align:center;flex:none; }
+.dev-body { display:flex;flex-direction:column; }
+.dev-body .dev .n { color:var(--mut); }
 
 .legend {
   display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px;padding:11px 14px;
@@ -442,8 +445,14 @@ class EnergyFlowCard extends HTMLElement {
     this._cfg = this._normalize(config);
     if (config.fonts !== false) ensureFonts();
     this._expanded = {};
+    this._expandedDev = {};
+    const markDev = (d) => {
+      if (d.expanded) this._expandedDev[d.key] = true;
+      d.children.forEach(markDev);
+    };
     this._cfg.groups.forEach((g) => {
       if (g.expanded) this._expanded[g.id] = true;
+      g.devices.forEach(markDev);
     });
     this._sig = '';
     this._build();
@@ -514,19 +523,28 @@ class EnergyFlowCard extends HTMLElement {
       invert: !!(raw.house && raw.house.invert)
     };
 
+    /* urządzenie może mieć własne pod-urządzenia (`devices:`) — np. kanały modułu.
+       Rodzic bez własnych encji sumuje dzieci. */
+    const normDevice = (d, key, inheritInvert) => {
+      const invert = d.invert === undefined ? inheritInvert : !!d.invert;
+      return {
+        key,
+        name: d.name || (typeof d.power === 'string' ? d.power : 'Urządzenie'),
+        icon: d.icon || 'plug',
+        power: d.power || null,
+        energy: d.energy || null,
+        invert,
+        expanded: !!d.expanded,
+        children: (d.devices || []).map((cd, k) => normDevice(cd, key + '_' + k, invert))
+      };
+    };
+
     c.groups = (raw.groups || []).map((g, i) => ({
       id: g.id || slug(g.name, i),
       name: g.name || 'Grupa ' + (i + 1),
       icon: g.icon || 'plug',
       expanded: !!g.expanded,
-      devices: (g.devices || []).map((d, j) => ({
-        key: 'd' + i + '_' + j,
-        name: d.name || (typeof d.power === 'string' ? d.power : 'Urządzenie'),
-        icon: d.icon || 'plug',
-        power: d.power || null,
-        energy: d.energy || null,
-        invert: d.invert === undefined ? !!g.invert : !!d.invert
-      }))
+      devices: (g.devices || []).map((d, j) => normDevice(d, 'd' + i + '_' + j, !!g.invert))
     }));
 
     return c;
@@ -665,6 +683,28 @@ class EnergyFlowCard extends HTMLElement {
           .join('')
       : '';
 
+    /* wiersz urządzenia; moduł z pod-urządzeniami dostaje strzałkę i zwijaną listę kanałów */
+    const devRow = (d, depth) => {
+      const kids = d.children || [];
+      return `
+      <div class="dev" data-node="dev_${d.key}"${kids.length ? ` data-devtoggle="${d.key}"` : ''} style="padding-left:${
+        9 + depth * 12
+      }px">
+        ${nodeSvg(14, d.icon)}
+        <div class="n">${esc(d.name)}</div>
+        <div class="mono p" data-f="pwr">—</div>
+        <div class="mono e" data-f="kwh">—</div>
+        ${kids.length ? '<span class="dev-chev" data-f="chev">▸</span>' : ''}
+      </div>
+      ${
+        kids.length
+          ? `<div class="dev-body hidden" data-devbody="${d.key}">${kids
+              .map((k) => devRow(k, depth + 1))
+              .join('')}</div>`
+          : ''
+      }`;
+    };
+
     const groupsHtml = g
       .map(
         (grp) => `
@@ -679,17 +719,7 @@ class EnergyFlowCard extends HTMLElement {
           <span class="grp-chev" data-f="chev">▸</span>
         </div>
         <div class="grp-body hidden" data-body="${esc(grp.id)}">
-          ${grp.devices
-            .map(
-              (d) => `
-            <div class="dev" data-node="dev_${d.key}">
-              ${nodeSvg(14, d.icon)}
-              <div class="n">${esc(d.name)}</div>
-              <div class="mono p" data-f="pwr">—</div>
-              <div class="mono e" data-f="kwh">—</div>
-            </div>`
-            )
-            .join('')}
+          ${grp.devices.map((d) => devRow(d, 0)).join('')}
         </div>
       </div>`
       )
@@ -853,9 +883,20 @@ class EnergyFlowCard extends HTMLElement {
   _bindEvents() {
     const root = this.shadowRoot;
 
+    root.querySelectorAll('[data-devtoggle]').forEach((el) => {
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const k = el.dataset.devtoggle;
+        this._expandedDev[k] = !this._expandedDev[k];
+        this._applyExpansion();
+      });
+    });
+
     root.querySelectorAll('[data-node]').forEach((el) => {
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        /* moduł z kanałami rozwija listę zamiast otwierać historię */
+        if (el.hasAttribute('data-devtoggle')) return;
         const n = this._nodes && this._nodes[el.dataset.node];
         if (n) this._openModal(n, el.dataset.node);
       });
@@ -891,6 +932,13 @@ class EnergyFlowCard extends HTMLElement {
 
   _applyExpansion() {
     const root = this.shadowRoot;
+    root.querySelectorAll('[data-devbody]').forEach((body) => {
+      const k = body.dataset.devbody;
+      const open = !!this._expandedDev[k];
+      body.classList.toggle('hidden', !open);
+      const chev = root.querySelector(`[data-devtoggle="${k}"] [data-f="chev"]`);
+      if (chev) chev.textContent = open ? '▾' : '▸';
+    });
     this._cfg.groups.forEach((g) => {
       const body = root.querySelector(`[data-body="${g.id}"]`);
       const chev = root.querySelector(`[data-toggle="${g.id}"] [data-f="chev"]`);
@@ -1014,41 +1062,70 @@ class EnergyFlowCard extends HTMLElement {
       };
     }
 
+    const buildDevice = (d) => {
+      const children = d.children.map(buildDevice);
+      const ownPower = asList(d.power).length > 0;
+      const ownEnergy = asList(d.energy).length > 0;
+      const p = ownPower ? this._power(d.power, d.invert) : null;
+      const e = ownEnergy ? this._energy(d.energy) : null;
+      const kidPower = children.reduce((t, k) => t + (k.off || k.unset ? 0 : k.power), 0);
+      const kidEnergy = children.reduce((t, k) => t + (k.energy || 0), 0);
+      const kidEntities = (f) => children.reduce((a, k) => a.concat(k[f]), []);
+
+      const power = ownPower ? p.v : children.length ? kidPower : null;
+      const energy = ownEnergy ? e.v : children.length ? kidEnergy : null;
+      /* brak skonfigurowanej encji mocy ≠ encja niedostępna — nie wygaszamy wiersza */
+      const unset = ownPower
+        ? false
+        : children.length
+        ? children.every((k) => k.unset)
+        : true;
+      const off = ownPower ? p.off : children.length ? children.every((k) => k.off) : !!(e && e.off);
+      const missing = ownPower ? !!p.missing : ownEnergy && !children.length ? !!e.missing : false;
+
+      return {
+        key: d.key,
+        name: d.name,
+        icon: d.icon,
+        power,
+        energy,
+        unset,
+        off,
+        missing,
+        idle: power !== null && !off && Math.abs(power) < 5,
+        children,
+        hasChildren: children.length > 0,
+        powerEntities: ownPower ? asList(d.power) : kidEntities('powerEntities'),
+        energyEntities: ownEnergy ? asList(d.energy) : kidEntities('energyEntities'),
+        powerEntity: ownPower ? d.power : null,
+        energyEntity: ownEnergy ? d.energy : null
+      };
+    };
+
+    /* spłaszczona lista wszystkich poziomów — do renderowania i sum grupy */
+    const flatten = (list) => list.reduce((a, d) => a.concat([d], flatten(d.children)), []);
+
     const groups = c.groups.map((g) => {
-      const devices = g.devices.map((d) => {
-        const p = this._power(d.power, d.invert);
-        const e = this._energy(d.energy);
-        /* brak skonfigurowanej encji mocy ≠ encja niedostępna — nie wygaszamy wiersza */
-        const noPower = asList(d.power).length === 0;
-        return {
-          key: d.key,
-          name: d.name,
-          icon: d.icon,
-          power: p.v,
-          energy: e.v,
-          unset: noPower,
-          missing: noPower ? !!e.missing : !!p.missing,
-          off: noPower ? !!e.off : p.off,
-          idle: !p.off && Math.abs(p.v) < 5,
-          powerEntity: d.power,
-          energyEntity: d.energy
-        };
-      });
-      const sum = devices.reduce((t, d) => t + (d.off ? 0 : d.power), 0);
+      const devices = g.devices.map(buildDevice);
+      const all = flatten(devices);
+      const sum = devices.reduce((t, d) => t + (d.off || d.unset ? 0 : d.power), 0);
       const nrg = devices.reduce((t, d) => t + (d.energy || 0), 0);
-      const active = devices.filter((d) => !d.off && Math.abs(d.power) >= 5).length;
+      const active = all.filter((d) => !d.hasChildren && !d.off && Math.abs(d.power || 0) >= 5).length;
+      const leaves = all.filter((d) => !d.hasChildren);
       return {
         id: g.id,
         name: g.name,
         icon: g.icon,
         devices,
+        all,
+        leafCount: leaves.length,
         power: sum,
         energy: nrg,
         active,
         off: devices.length > 0 && devices.every((d) => d.off),
         idle: sum < idle,
-        powerEntities: devices.reduce((a, d) => a.concat(asList(d.powerEntity)), []),
-        energyEntities: devices.reduce((a, d) => a.concat(asList(d.energyEntity)), [])
+        powerEntities: devices.reduce((a, d) => a.concat(d.powerEntities), []),
+        energyEntities: devices.reduce((a, d) => a.concat(d.energyEntities), [])
       };
     });
 
@@ -1253,16 +1330,16 @@ class EnergyFlowCard extends HTMLElement {
     /* grupy i urządzenia */
     let totalDevices = 0;
     m.groups.forEach((g) => {
-      totalDevices += g.devices.length;
+      totalDevices += g.leafCount;
       const el = this._els['grp-' + g.id];
       if (!el) return;
       set(el, 'pwr', fmtW(g.power));
       set(
         el,
         'meta',
-        g.devices.length +
+        g.leafCount +
           ' ' +
-          this._plural(g.devices.length, 'urządzenie', 'urządzenia', 'urządzeń') +
+          this._plural(g.leafCount, 'urządzenie', 'urządzenia', 'urządzeń') +
           ' · ' +
           g.active +
           ' ' +
@@ -1272,7 +1349,7 @@ class EnergyFlowCard extends HTMLElement {
       );
       flags(el, g.off, !g.off && g.idle);
       nodes['grp-' + g.id] = {
-        label: g.name + ' · ' + g.devices.length + ' urz.',
+        label: g.name + ' · ' + g.leafCount + ' urz.',
         entityId: (g.powerEntities.length || g.energyEntities.length) + ' encji w grupie',
         icon: g.icon,
         accent: 'cons',
@@ -1283,22 +1360,24 @@ class EnergyFlowCard extends HTMLElement {
         energyEntities: g.energyEntities
       };
 
-      g.devices.forEach((d) => {
+      g.all.forEach((d) => {
         const de = this._els['dev_' + d.key];
         if (!de) return;
         set(de, 'pwr', d.missing ? 'brak encji' : d.off ? 'brak' : d.unset ? '—' : fmtW(d.power));
         set(de, 'kwh', d.off ? '—' : fmtKwh(d.energy));
         flags(de, d.off, !d.off && d.idle);
         nodes['dev_' + d.key] = {
-          label: d.name,
-          entityId: entityLabel(d.powerEntity || d.energyEntity),
+          label: d.hasChildren ? d.name + ' · suma' : d.name,
+          entityId: d.hasChildren
+            ? d.powerEntities.length + ' encji · suma kanałów'
+            : entityLabel(d.powerEntity || d.energyEntity),
           icon: d.icon,
           accent: 'cons',
           power: d.power,
           energy: d.energy,
           off: d.off,
-          powerEntities: asList(d.powerEntity),
-          energyEntities: asList(d.energyEntity)
+          powerEntities: d.powerEntities,
+          energyEntities: d.energyEntities
         };
       });
     });
@@ -1406,7 +1485,7 @@ class EnergyFlowCard extends HTMLElement {
         this._q.strings.classList.toggle('hidden', narrow);
         this._q.stringlist.classList.toggle('hidden', !narrow);
       }
-      const total = this._cfg.groups.reduce((t, g) => t + g.devices.length, 0);
+      const total = this._m ? this._m.groups.reduce((t, g) => t + g.leafCount, 0) : 0;
       this._q.groups.style.setProperty('--colmin', (narrow ? 150 : total > 18 ? 190 : 215) + 'px');
       requestAnimationFrame(() => this._measure());
       return;
