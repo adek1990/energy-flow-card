@@ -1,10 +1,15 @@
 # Port konfiguracji z sunsynk-power-flow-card (Fronius Symo + Smart Meter 63A + Sonoff/Shelly)
 # Akumulator pominięty — w źródłowej konfiguracji było show_battery: false.
 #
-# Do zweryfikowania po wgraniu (oznaczone SPRAWDŹ niżej):
-#  1. znak mocy sieci i domu — jeśli strzałki idą w złą stronę, przełącz `invert`,
-#  2. odbiorniki mają dziś tylko liczniki energii, więc ich linie są kropkowane (0 W);
-#     odkomentuj `power:` po ustaleniu nazw encji mocy w Narzędziach deweloperskich.
+# Zasada: pole `power` = moc chwilowa (W/kW), pole `energy` = licznik narastający (kWh).
+# Węzeł domu sumuje moc wszystkich urządzeń z grup poniżej.
+#
+# DO SPRAWDZENIA po wgraniu — karta sama wypisze w konsoli (F12) każde błędne id
+# jako „brak encji", więc wystarczy zerknąć tam po odświeżeniu:
+#   1. sensor.sonoff_dual_r3_*_power_1 / _power_2  — nazwy wg wzorca integracji SonoffLAN,
+#   2. sensor.shellypro3em_fce8c0daec00_power      — w części wersji: _total_active_power,
+#   3. moc rekuperatora — encja źródłowa licznika sensor.rekuperator_dzis,
+#   4. kierunek sieci — patrz komentarz przy `grid:`.
 
 type: custom:energy-flow-card
 title: Przepływ energii
@@ -29,19 +34,24 @@ solar:
 
 grid:
   name: Sieć
-  # SPRAWDŹ: odpowiednik grid.invert_power: true z sunsynk.
-  # Jeśli przy poborze karta pokazuje "Oddanie do sieci" — usuń tę linię.
+  # invert USUNIĘTY: przy produkcji 16,9 kW karta pokazywała „Pobór 6,89 kW",
+  # co fizycznie nie ma sensu — to była w rzeczywistości nadwyżka oddawana do sieci.
+  # Jeśli po zmianie kierunek jest odwrotny, dopisz z powrotem `invert: true`.
   power: sensor.smart_meter_63a_realna_moc
-  invert: true
   energy_import: sensor.smart_meter_63a_energia_rzeczywista_plus
   energy_export: sensor.smart_meter_63a_energia_rzeczywista_minus
 
 house:
   name: Dom
-  # SPRAWDŹ: Fronius raportuje zużycie wartością ujemną — stąd invert.
-  # Jeśli Twój sensor jest dodatni, usuń `invert: true`.
-  power: sensor.solarnet_1_power_load_consumed
-  invert: true
+  # Bez `power:` węzeł domu sumuje moc WSZYSTKICH urządzeń z grup poniżej.
+  # sensor.solarnet_1_power_load_consumed zwracał 0 W, więc go nie używamy.
+  #
+  # Alternatywy, gdyby suma odbiorników była niepełna:
+  #   power: auto                                   → bilans: PV + sieć − akumulator
+  #   power: sensor.solarnet_1_power_load_consumed  → osobna encja zużycia
+  #
+  # SPRAWDŹ: to licznik od początku instalacji (38 MWh), nie dzienny.
+  # Dla sensownego „dzisiaj" zrób utility_meter z cyklem dobowym.
   energy: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
 
 groups:
@@ -60,36 +70,92 @@ groups:
     devices:
       - name: Pompa ciepła
         icon: climate
-        # power: sensor.shellypro3em_fce8c0daec00_total_power
+        power: sensor.shellypro3em_fce8c0daec00_power
         energy: sensor.shellypro3em_fce8c0daec00_energy
 
+  # Każdy moduł Sonoff Dual R3 to osobny wiersz sumujący swoje dwa kanały.
+  # Nazwy zostawione numerami — zgadzają się z entity_id, łatwiej debugować.
   - name: Gniazdka Sonoff
     icon: plug
     devices:
-      - name: Sonoff · zestaw 1
+      - name: Sonoff 1
         icon: plug
+        power:
+          - sensor.sonoff_dual_r3_1_power_1
+          - sensor.sonoff_dual_r3_1_power_2
         energy:
           - sensor.sonoff_dual_r3_1_energy_1_daily
           - sensor.sonoff_dual_r3_1_energy_2_daily
+      - name: Sonoff 2
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_2_power_1
+          - sensor.sonoff_dual_r3_2_power_2
+        energy:
           - sensor.sonoff_dual_r3_2_energy_1_daily
           - sensor.sonoff_dual_r3_2_energy_2_daily
+      - name: Sonoff 4
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_4_power_1
+          - sensor.sonoff_dual_r3_4_power_2
+        energy:
           - sensor.sonoff_dual_r3_4_energy_1_daily
           - sensor.sonoff_dual_r3_4_energy_2_daily
+      - name: Sonoff 5
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_5_power_1
+          - sensor.sonoff_dual_r3_5_power_2
+        energy:
           - sensor.sonoff_dual_r3_5_energy_1_daily
           - sensor.sonoff_dual_r3_5_energy_2_daily
-      - name: Sonoff · zestaw 2
+      - name: Sonoff 8
         icon: plug
+        power:
+          - sensor.sonoff_dual_r3_8_power_1
+          - sensor.sonoff_dual_r3_8_power_2
         energy:
           - sensor.sonoff_dual_r3_8_energy_1_daily
           - sensor.sonoff_dual_r3_8_energy_2_daily
+      - name: Sonoff 9
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_9_power_1
+          - sensor.sonoff_dual_r3_9_power_2
+        energy:
           - sensor.sonoff_dual_r3_9_energy_1_daily
           - sensor.sonoff_dual_r3_9_energy_2_daily
+      - name: Sonoff 10
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_10_power_1
+          - sensor.sonoff_dual_r3_10_power_2
+        energy:
           - sensor.sonoff_dual_r3_10_energy_1_daily
           - sensor.sonoff_dual_r3_10_energy_2_daily
+      - name: Sonoff 11
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_11_power_1
+          - sensor.sonoff_dual_r3_11_power_2
+        energy:
           - sensor.sonoff_dual_r3_11_energy_1_daily
           - sensor.sonoff_dual_r3_11_energy_2_daily
+      - name: Sonoff 12
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_12_power_1
+          - sensor.sonoff_dual_r3_12_power_2
+        energy:
           - sensor.sonoff_dual_r3_12_energy_1_daily
           - sensor.sonoff_dual_r3_12_energy_2_daily
+      - name: Sonoff 13
+        icon: plug
+        power:
+          - sensor.sonoff_dual_r3_13_power_1
+          - sensor.sonoff_dual_r3_13_power_2
+        energy:
           - sensor.sonoff_dual_r3_13_energy_1_daily
           - sensor.sonoff_dual_r3_13_energy_2_daily
 

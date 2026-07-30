@@ -56,18 +56,21 @@ function ensureFonts() {
 const nf = (v, d) =>
   Number(v).toLocaleString('pl-PL', { minimumFractionDigits: d, maximumFractionDigits: d });
 
+/* `-0` po odwróceniu znaku wypisywałoby się jako „-0 W" */
+const noNegZero = (v) => (v === 0 ? 0 : v);
+
 function fmtW(w) {
   if (w === null || w === undefined || Number.isNaN(w)) return '—';
   const a = Math.abs(w);
   if (a >= 1000000) return nf(w / 1000000, 2) + ' MW';
   if (a >= 1000) return nf(w / 1000, a >= 10000 ? 1 : 2) + ' kW';
-  return nf(Math.round(w), 0) + ' W';
+  return nf(noNegZero(Math.round(w)), 0) + ' W';
 }
 
 function fmtKwh(k) {
   if (k === null || k === undefined || Number.isNaN(k)) return '—';
   if (Math.abs(k) >= 1000) return nf(k / 1000, 2) + ' MWh';
-  return nf(k, Math.abs(k) < 10 ? 2 : 1) + ' kWh';
+  return nf(noNegZero(k), Math.abs(k) < 10 ? 2 : 1) + ' kWh';
 }
 
 const POWER_FACTOR = { W: 1, kW: 1000, MW: 1000000, mW: 0.001 };
@@ -361,7 +364,22 @@ const STYLES = `
 .sec-head { display:flex;align-items:baseline;gap:10px;margin-bottom:8px; }
 .sec-t { font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mut); }
 .sec-m { font-size:11px;color:var(--mut); }
-.chart-wrap { position:relative;width:100%;height:200px; }
+.chart-wrap { position:relative;width:100%;height:200px;cursor:crosshair; }
+.bars-wrap { position:relative;width:100%;cursor:crosshair; }
+.cross-line {
+  position:absolute;top:0;bottom:0;width:1px;background:var(--mut);opacity:.5;
+  pointer-events:none;display:none;
+}
+.cross-dot {
+  position:absolute;width:9px;height:9px;border-radius:50%;border:2px solid var(--card);
+  pointer-events:none;display:none;transform:translate(-50%,-50%);
+}
+.cross-tip {
+  position:absolute;z-index:3;pointer-events:none;display:none;padding:6px 9px;border-radius:9px;
+  background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 20px var(--sh);white-space:nowrap;
+}
+.cross-tip .t { font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut); }
+.cross-tip .v { font-size:14px;font-weight:600;margin-top:3px; }
 .hlabel { position:absolute;left:2px;font-size:9px;color:var(--mut);background:var(--card);padding:0 3px;border-radius:3px;pointer-events:none; }
 .xlabels { display:flex;justify-content:space-between;margin-top:5px; }
 .xlabels div { font-size:9px;color:var(--mut); }
@@ -557,8 +575,9 @@ class EnergyFlowCard extends HTMLElement {
     return this._sum(ref, POWER_FACTOR, invert);
   }
 
-  _energy(ref, invert) {
-    return this._sum(ref, ENERGY_FACTOR, invert);
+  /* `invert` dotyczy wyłącznie mocy — liczniki energii są zawsze narastające i dodatnie */
+  _energy(ref) {
+    return this._sum(ref, ENERGY_FACTOR, false);
   }
 
   _numeric(entityId) {
@@ -912,7 +931,7 @@ class EnergyFlowCard extends HTMLElement {
     const strings = c.solar
       ? c.solar.strings.map((s) => {
           const p = this._power(s.power, s.invert);
-          const e = this._energy(s.energy, s.invert);
+          const e = this._energy(s.energy);
           return {
             key: s.key,
             name: s.name,
@@ -932,7 +951,7 @@ class EnergyFlowCard extends HTMLElement {
     if (c.solar) {
       const direct = c.solar.power ? this._power(c.solar.power, c.solar.invert) : null;
       const sum = strings.reduce((t, s) => t + (s.off ? 0 : s.power), 0);
-      const eDirect = c.solar.energy ? this._energy(c.solar.energy, c.solar.invert) : null;
+      const eDirect = c.solar.energy ? this._energy(c.solar.energy) : null;
       const eSum = strings.reduce((t, s) => t + (s.energy || 0), 0);
       solar = {
         name: c.solar.name,
@@ -998,7 +1017,7 @@ class EnergyFlowCard extends HTMLElement {
     const groups = c.groups.map((g) => {
       const devices = g.devices.map((d) => {
         const p = this._power(d.power, d.invert);
-        const e = this._energy(d.energy, d.invert);
+        const e = this._energy(d.energy);
         /* brak skonfigurowanej encji mocy ≠ encja niedostępna — nie wygaszamy wiersza */
         const noPower = asList(d.power).length === 0;
         return {
@@ -1035,8 +1054,30 @@ class EnergyFlowCard extends HTMLElement {
 
     const consSum = groups.reduce((t, g) => t + g.power, 0);
     const consNrg = groups.reduce((t, g) => t + g.energy, 0);
+
+    /* `power: auto` — bilans węzła zamiast osobnej encji zużycia:
+       zużycie = fotowoltaika + sieć(+pobór/−oddanie) − akumulator(+ładowanie) */
+    if (c.house.power === 'auto') {
+      const derived =
+        (solar ? solar.power : 0) +
+        (grid && !grid.off ? grid.power : 0) -
+        (battery && !battery.off ? battery.power : 0);
+      const house0 = {
+        name: c.house.name,
+        power: Math.max(0, Math.round(derived)),
+        energy: c.house.energy ? this._energy(c.house.energy).v : consNrg,
+        derived: true,
+        powerEntities: (solar ? solar.powerEntities : []).concat(grid ? grid.powerEntities : []),
+        energyEntities: c.house.energy ? asList(c.house.energy) : []
+      };
+      const gi0 = grid && !grid.off && grid.power > 0 ? grid.power : 0;
+      house0.selfPct =
+        house0.power > 0 ? Math.round((100 * Math.max(0, house0.power - gi0)) / house0.power) : 100;
+      return { strings, solar, grid, battery, groups, house: house0 };
+    }
+
     const hp = c.house.power ? this._power(c.house.power, c.house.invert) : null;
-    const he = c.house.energy ? this._energy(c.house.energy, c.house.invert) : null;
+    const he = c.house.energy ? this._energy(c.house.energy) : null;
     const house = {
       name: c.house.name,
       power: hp && !hp.off ? hp.v : consSum,
@@ -1232,7 +1273,7 @@ class EnergyFlowCard extends HTMLElement {
       flags(el, g.off, !g.off && g.idle);
       nodes['grp-' + g.id] = {
         label: g.name + ' · ' + g.devices.length + ' urz.',
-        entityId: g.powerEntities.length + ' encji w grupie',
+        entityId: (g.powerEntities.length || g.energyEntities.length) + ' encji w grupie',
         icon: g.icon,
         accent: 'cons',
         power: g.power,
@@ -1632,11 +1673,17 @@ class EnergyFlowCard extends HTMLElement {
     let peak = '—';
     let avg = '—';
     let xlabels = [];
+    let pts = null;
+    let max = 1;
+    let t0 = 0;
+    let step = 0;
 
     if (power && power.values.length) {
-      const pts = power.values;
+      pts = power.values;
+      t0 = power.t0;
+      step = power.step;
       const n = pts.length;
-      const max = Math.max.apply(null, pts) * 1.12 || 1;
+      max = Math.max.apply(null, pts) * 1.12 || 1;
       const X = (i) => (i / (n - 1)) * 760;
       const Y = (v) => 200 - (v / max) * 186;
       line = 'M ' + X(0).toFixed(1) + ' ' + Y(pts[0]).toFixed(1);
@@ -1699,7 +1746,100 @@ class EnergyFlowCard extends HTMLElement {
     }
 
     if (!line && !barRects.length) return null;
-    return { color, line, area, hlines, xlabels, peak, avg, bars: barRects, barLabels, barCaption };
+    return {
+      color,
+      line,
+      area,
+      hlines,
+      xlabels,
+      peak,
+      avg,
+      bars: barRects,
+      barLabels,
+      barCaption,
+      /* dane pod celownik podążający za kursorem */
+      pts,
+      max,
+      t0,
+      step,
+      single: bounds.single,
+      barPoints: barsData || []
+    };
+  }
+
+  /* celownik podążający za kursorem: pionowa linia, punkt na serii i wartość w danym momencie */
+  _bindCrosshair(host, ch) {
+    const stamp = (t) => {
+      const d = new Date(t);
+      const hhmm =
+        String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      return ch.single ? hhmm : d.getDate() + '.' + (d.getMonth() + 1) + ' · ' + hhmm;
+    };
+
+    const attach = (wrap, count, valueAt, labelAt, yAt) => {
+      if (!wrap || !count) return;
+      const line = wrap.querySelector('.cross-line');
+      const dot = wrap.querySelector('.cross-dot');
+      const tip = wrap.querySelector('.cross-tip');
+      const tipT = tip.querySelector('.t');
+      const tipV = tip.querySelector('.v');
+
+      const move = (ev) => {
+        const r = wrap.getBoundingClientRect();
+        if (!r.width) return;
+        const f = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+        const i = Math.min(count - 1, Math.max(0, Math.round(f * (count - 1))));
+        const x = count > 1 ? (i / (count - 1)) * r.width : r.width / 2;
+
+        line.style.display = 'block';
+        line.style.left = x.toFixed(1) + 'px';
+
+        if (dot) {
+          const y = yAt(i);
+          dot.style.display = 'block';
+          dot.style.left = x.toFixed(1) + 'px';
+          dot.style.top = y.toFixed(1) + 'px';
+        }
+
+        tipT.textContent = labelAt(i);
+        tipV.textContent = valueAt(i);
+        tip.style.display = 'block';
+        const tw = tip.offsetWidth || 120;
+        tip.style.left = Math.min(Math.max(0, x + 12), Math.max(0, r.width - tw)) + 'px';
+        tip.style.top = (dot ? Math.max(0, yAt(i) - 52) : 6) + 'px';
+      };
+
+      const hide = () => {
+        line.style.display = 'none';
+        if (dot) dot.style.display = 'none';
+        tip.style.display = 'none';
+      };
+
+      wrap.addEventListener('mousemove', move);
+      wrap.addEventListener('mouseleave', hide);
+    };
+
+    /* wykres mocy */
+    if (ch.pts && ch.pts.length) {
+      attach(
+        host.querySelector('.chart-wrap'),
+        ch.pts.length,
+        (i) => fmtW(ch.pts[i]),
+        (i) => stamp(ch.t0 + i * ch.step),
+        (i) => 200 - (ch.pts[i] / ch.max) * 186
+      );
+    }
+
+    /* słupki energii */
+    if (ch.barPoints && ch.barPoints.length) {
+      attach(
+        host.querySelector('.bars-wrap'),
+        ch.barPoints.length,
+        (i) => fmtKwh(Math.max(0, ch.barPoints[i].v || 0)),
+        (i) => stamp(ch.barPoints[i].t),
+        null
+      );
+    }
   }
 
   _renderModal() {
@@ -1778,6 +1918,9 @@ class EnergyFlowCard extends HTMLElement {
                    <path d="${ch.line}" fill="none" stroke="${ch.color}" stroke-width="1.8" stroke-linejoin="round"></path>
                  </svg>
                  ${ch.hlines.map((h) => `<div class="mono hlabel" style="top:${h.top}px">${h.label}</div>`).join('')}
+                 <div class="cross-line"></div>
+                 <div class="cross-dot" style="background:${ch.color}"></div>
+                 <div class="cross-tip"><div class="mono t"></div><div class="mono v" style="color:${ch.color}"></div></div>
                </div>
                <div class="xlabels">${ch.xlabels.map((x) => `<div class="mono">${esc(x)}</div>`).join('')}</div>`
             : ''
@@ -1788,15 +1931,19 @@ class EnergyFlowCard extends HTMLElement {
                  <div class="sec-t">Energia</div>
                  <div class="mono sec-m">${esc(ch.barCaption)}</div>
                </div>
-               <svg viewBox="0 0 760 110" preserveAspectRatio="none" style="width:100%;height:110px;display:block">
-                 <line x1="0" y1="100" x2="760" y2="100" stroke="var(--line)" stroke-width="1"></line>
-                 ${ch.bars
-                   .map(
-                     (r) =>
-                       `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="2" fill="${ch.color}" opacity="0.72"></rect>`
-                   )
-                   .join('')}
-               </svg>
+               <div class="bars-wrap">
+                 <svg viewBox="0 0 760 110" preserveAspectRatio="none" style="width:100%;height:110px;display:block">
+                   <line x1="0" y1="100" x2="760" y2="100" stroke="var(--line)" stroke-width="1"></line>
+                   ${ch.bars
+                     .map(
+                       (r) =>
+                         `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="2" fill="${ch.color}" opacity="0.72"></rect>`
+                     )
+                     .join('')}
+                 </svg>
+                 <div class="cross-line"></div>
+                 <div class="cross-tip"><div class="mono t"></div><div class="mono v" style="color:${ch.color}"></div></div>
+               </div>
                <div class="blabels">${ch.barLabels.map((l) => `<div class="mono">${esc(l)}</div>`).join('')}</div>`
             : ''
         }`;
@@ -1893,6 +2040,8 @@ class EnergyFlowCard extends HTMLElement {
         m.month = new Date(m.month.getFullYear(), m.month.getMonth() + 1, 1);
         this._renderModal();
       });
+    if (m.chart) this._bindCrosshair(h, m.chart);
+
     h.querySelectorAll('[data-day]').forEach((el) =>
       el.addEventListener('click', () => {
         const ts = Number(el.dataset.day);

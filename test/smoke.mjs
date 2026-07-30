@@ -40,6 +40,7 @@ globalThis.Event = window.Event;
 globalThis.CustomEvent = window.CustomEvent;
 globalThis.ResizeObserver = window.ResizeObserver;
 globalThis.requestAnimationFrame = (fn) => setTimeout(fn, 0);
+globalThis.MouseEvent = window.MouseEvent;
 
 const cardUrl = new URL('../dist/energy-flow-card.js', import.meta.url).href;
 await import(cardUrl);
@@ -198,6 +199,33 @@ ok(card._modal.chart.line.startsWith('M 0.0 '), 'ścieżka wykresu mocy');
 ok(card._modal.chart.bars.length === 12, `słupki energii ze statystyk: ${card._modal.chart.bars.length}`);
 ok(mtxt.includes('godzinowo'), 'podpis „godzinowo" dla zakresu jednodniowego');
 
+// celownik podążający za kursorem
+const cw = card._modalHost.querySelector('.chart-wrap');
+const cwBox = { left: 100, top: 50, width: 600, height: 200 };
+cw.getBoundingClientRect = () => ({ ...cwBox, right: 700, bottom: 250, x: 100, y: 50 });
+ok(!!cw.querySelector('.cross-line') && !!cw.querySelector('.cross-dot'), 'elementy celownika w wykresie mocy');
+ok(cw.querySelector('.cross-line').style.display === '', 'celownik ukryty przed najechaniem');
+cw.dispatchEvent(new MouseEvent('mousemove', { clientX: 400, clientY: 150, bubbles: true }));
+const ctip = cw.querySelector('.cross-tip');
+ok(cw.querySelector('.cross-line').style.display === 'block', 'ruch myszy pokazuje pionową linię');
+// linia przyskakuje do najbliższej próbki, żeby punkt leżał dokładnie na serii
+const lineX = parseFloat(cw.querySelector('.cross-line').style.left);
+const spacing = 600 / (card._modal.chart.pts.length - 1);
+// +0.1 px: pozycja jest zapisywana z dokładnością do jednego miejsca po przecinku
+ok(Math.abs(lineX - 300) <= spacing / 2 + 0.1, `linia przyskakuje do próbki przy kursorze: ${lineX}px (odstęp próbek ${spacing.toFixed(1)}px)`);
+ok(/W$/.test(ctip.querySelector('.v').textContent), `wartość pod kursorem: ${ctip.querySelector('.v').textContent}`);
+ok(/^\d{2}:\d{2}$/.test(ctip.querySelector('.t').textContent), `godzina punktu: ${ctip.querySelector('.t').textContent}`);
+ok(cw.querySelector('.cross-dot').style.display === 'block', 'punkt na serii widoczny');
+const dotTop = parseFloat(cw.querySelector('.cross-dot').style.top);
+ok(dotTop >= 0 && dotTop <= 200, `punkt w granicach wykresu: ${dotTop}px`);
+cw.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+ok(cw.querySelector('.cross-line').style.display === 'none', 'zjechanie myszą chowa celownik');
+
+const bw = card._modalHost.querySelector('.bars-wrap');
+bw.getBoundingClientRect = () => ({ left: 100, top: 300, width: 600, height: 110, right: 700, bottom: 410, x: 100, y: 300 });
+bw.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 350, bubbles: true }));
+ok(/kWh$/.test(bw.querySelector('.cross-tip .v').textContent), `słupki też mają odczyt: ${bw.querySelector('.cross-tip .v').textContent}`);
+
 card._modal.range = 'custom';
 card._renderModal();
 ok(card._modalHost.textContent.includes('wybierz datę początkową'), 'kalendarz zakresu własnego');
@@ -257,6 +285,61 @@ ok(g3.power === 1000, `moc grupy z listy: ${g3.power} W`);
 ok(card3._nodes['dev_d0_0'].energyEntities.length === 3, 'modal dostaje wszystkie encje z listy');
 ok(card3._nodes['dev_d0_1'].entityId === '2 encji · suma', `podpis listy: ${card3._nodes['dev_d0_1'].entityId}`);
 ok(card3.shadowRoot.querySelector('[data-node="dev_d0_0"]').getAttribute('data-off') === null, 'brak data-off przy samym liczniku energii');
+
+console.log('\n— invert nie dotyczy energii, dom sumuje moc odbiorników —');
+const hass5 = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.zuzycie_licznik', 38660, 'kWh'), // licznik narastający, zawsze dodatni
+    S('sensor.zero_w', 0, 'W'),
+    S('sensor.pv', 16900, 'W'),
+    S('sensor.siec', -6890, 'W'), // ujemne = oddawanie
+    S('sensor.gniazdko_1', 1200, 'W'),
+    S('sensor.gniazdko_2', 800, 'W'),
+    S('sensor.gniazdko_e', 2.67, 'kWh')
+  ]),
+  callWS: async () => ({})
+};
+const mk = (housePower) => {
+  const el = document.createElement('energy-flow-card');
+  el.setConfig({
+    type: 'custom:energy-flow-card',
+    solar: { power: 'sensor.pv', strings: [{ name: 'S1', power: 'sensor.pv' }] },
+    grid: { power: 'sensor.siec' },
+    house: Object.assign({ energy: 'sensor.zuzycie_licznik', invert: true }, housePower ? { power: housePower } : {}),
+    groups: [
+      {
+        name: 'Gniazdka',
+        expanded: true,
+        devices: [{ name: 'G1', power: ['sensor.gniazdko_1', 'sensor.gniazdko_2'], energy: 'sensor.gniazdko_e' }]
+      }
+    ]
+  });
+  document.body.appendChild(el);
+  el._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+  el.hass = hass5;
+  return el;
+};
+
+const c5 = mk(null);
+await new Promise((r) => setTimeout(r, 30));
+ok(c5._m.house.energy === 38660, `invert nie odwraca licznika energii: ${c5._m.house.energy} kWh`);
+ok(c5.shadowRoot.textContent.includes('38,66 MWh'), 'energia domu dodatnia na karcie');
+ok(c5._m.house.power === 2000, `dom sumuje moc odbiorników: ${c5._m.house.power} W (oczek. 2000)`);
+ok(c5.shadowRoot.textContent.includes('Oddanie do sieci'), 'ujemna moc sieci = oddawanie');
+ok(c5._nodes['grp-gniazdka_0'].entityId === '2 encji w grupie', `dymek grupy liczy encje: ${c5._nodes['grp-gniazdka_0'].entityId}`);
+
+const c5b = mk('sensor.zero_w');
+await new Promise((r) => setTimeout(r, 30));
+ok(
+  c5b.shadowRoot.querySelector('[data-node="hub"] [data-f="pwr"]').textContent === '0 W',
+  `encja 0 W z invert nie daje „-0 W" (jest: ${c5b.shadowRoot.querySelector('[data-node="hub"] [data-f="pwr"]').textContent})`
+);
+
+const c5c = mk('auto');
+await new Promise((r) => setTimeout(r, 30));
+ok(c5c._m.house.power === 10010, `power: auto = PV + sieć − akumulator: ${c5c._m.house.power} W (oczek. 10010)`);
+ok(c5c._m.house.selfPct === 100, `przy oddawaniu do sieci: ${c5c._m.house.selfPct}% samowystarczalności`);
 
 console.log('\n— rozróżnienie: brak encji vs encja niedostępna —');
 const hass4 = {

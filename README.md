@@ -123,8 +123,11 @@ Sekcja pojawia się tylko wtedy, gdy jest co najmniej jeden string.
 | Opcja    | Opis |
 |----------|------|
 | `name`   | Nazwa węzła centralnego (domyślnie `Dom`) |
-| `power`  | Moc całkowita; bez niej suma wszystkich urządzeń z grup |
+| `power`  | Moc całkowita. Bez tego pola — suma mocy wszystkich urządzeń z grup. Wartość `auto` — bilans węzła: `fotowoltaika + sieć − akumulator` |
 | `energy` | Energia dobowa; bez niej suma z grup |
+
+`power: auto` przydaje się, gdy falownik nie raportuje zużycia (np. Fronius bez licznika
+obciążenia w SolarNet zwraca `0 W`), a odbiorniki są opomiarowane tylko częściowo.
 
 Wskaźnik samowystarczalności liczy się jako `(moc domu − pobór z sieci) / moc domu`.
 
@@ -162,8 +165,9 @@ Listy edytuje się w widoku YAML — edytor GUI pokazuje je tylko do odczytu, ż
 
 ### Odwracanie znaku
 
-`invert: true` działa w `grid`, `battery`, `house`, `solar` (dziedziczone przez stringi) oraz
-w pojedynczej grupie i urządzeniu. Przydaje się np. przy integracji Fronius, która raportuje zużycie
+`invert: true` odwraca **wyłącznie moc** — liczniki energii są narastające i zawsze dodatnie, więc
+`energy` nigdy nie jest odwracane. Działa w `grid`, `battery`, `house`, `solar` (dziedziczone przez
+stringi) oraz w pojedynczej grupie i urządzeniu. Przydaje się np. przy integracji Fronius, która raportuje zużycie
 domu wartością ujemną.
 
 ### Migracja z `sunsynk-power-flow-card`
@@ -212,9 +216,18 @@ normalnie także w jego popupach.
 
 ## Rozwiązywanie problemów
 
+Karta rozróżnia trzy różne sytuacje, żeby nie trzeba było zgadywać:
+
+| Napis | Znaczenie |
+|-------|-----------|
+| `brak encji` | Podanego `entity_id` nie ma w Home Assistancie — literówka lub usunięta integracja. Pełną listę karta wypisuje w konsoli przeglądarki (F12) |
+| `brak` / `niedostępny` | Encja istnieje, ale jest `unavailable`/`unknown` albo jej stan nie jest liczbą |
+| `—` | Pole nie zostało skonfigurowane, np. urządzenie ma tylko licznik energii — to nie jest awaria i wiersz nie jest wygaszany |
+
 | Objaw | Przyczyna |
 |-------|-----------|
-| Węzeł pokazuje „niedostępny" | Encja nie istnieje, jest `unavailable`/`unknown` albo jej stan nie jest liczbą |
+| Zmiany w karcie nie są widoczne | Przeglądarka trzyma stary plik. Ctrl+Shift+R, a przy instalacji ręcznej dopisz `?v=2` do URL zasobu |
+| Odbiorniki mają 0 W i kropkowane linie | Skonfigurowano tylko `energy` — dodaj `power`, żeby przepływ ożył |
 | Brak sekcji fotowoltaiki / sieci / akumulatora | Nie skonfigurowano żadnej encji w danej sekcji — węzeł jest ukrywany celowo |
 | „Brak historii dla tego zakresu" | Rejestrator nie ma danych dla wybranych encji i okresu (np. krótkie `purge_keep_days`) |
 | Brak edytora GUI | `energy-flow-card-editor.js` nie leży obok `energy-flow-card.js` |
