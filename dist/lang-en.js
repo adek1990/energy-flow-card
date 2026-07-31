@@ -43,6 +43,17 @@ export default {
   plural_string: ['inverter string', 'inverter strings', 'inverter strings'],
   in_groups: 'in',
 
+  /* daily summary */
+  unmetered: 'Unmetered',
+  sum_produced: 'Produced',
+  sum_consumed: 'House used',
+  sum_self_used: 'Used from solar',
+  sum_exported: 'Exported',
+  sum_imported: 'Imported',
+  sum_of_production: '{n}% of production',
+  sum_of_consumption: '{n}% of consumption',
+  sum_self_sufficiency: '{n}% self-sufficient',
+
   /* legend */
   legend_solar: 'Solar',
   legend_grid: 'Grid',

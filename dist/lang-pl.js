@@ -43,6 +43,17 @@ export default {
   plural_string: ['string falownika', 'stringi falownika', 'stringów falownika'],
   in_groups: 'w',
 
+  /* podsumowanie dnia */
+  unmetered: 'Niezmierzone',
+  sum_produced: 'Wyprodukowano',
+  sum_consumed: 'Zużył dom',
+  sum_self_used: 'Zużyte z PV',
+  sum_exported: 'Oddane do sieci',
+  sum_imported: 'Pobrane z sieci',
+  sum_of_production: '{n}% produkcji',
+  sum_of_consumption: '{n}% zużycia',
+  sum_self_sufficiency: '{n}% samowystarczalności',
+
   /* legenda */
   legend_solar: 'Fotowoltaika',
   legend_grid: 'Sieć',

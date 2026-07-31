@@ -441,6 +441,79 @@ ok(c6._modalHost.textContent.includes('Kanał 1'), 'historia dotyczy kliknięteg
 c6._closeModal();
 ok(c6._nodes['dev_d0_0'].powerEntities.length === 2, 'historia modułu sumuje encje obu kanałów');
 
+console.log('\n— podsumowanie dnia i węzeł niezmierzony —');
+// realne liczby: PV 84,8 kWh · pobór 4,02+13,42 · oddanie 5,0+0 · zmierzone odbiorniki 0,77 kWh
+const hassE = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.pv_p', 16700, 'W'),
+    S('sensor.pv_e', 84.8, 'kWh'),
+    S('sensor.imp1', 4.02, 'kWh'),
+    S('sensor.imp2', 13.42, 'kWh'),
+    S('sensor.exp1', 5, 'kWh'),
+    S('sensor.exp2', 0, 'kWh'),
+    S('sensor.gimp', 0, 'W'),
+    S('sensor.gexp', 6640, 'W'),
+    S('sensor.pompa_p', 21, 'W'),
+    S('sensor.pompa_e', 0.77, 'kWh')
+  ]),
+  callWS: async () => ({})
+};
+const ce = document.createElement('energy-flow-card');
+ce.setConfig({
+  type: 'custom:energy-flow-card',
+  solar: { power: 'sensor.pv_p', energy: 'sensor.pv_e', strings: [{ name: 'S', power: 'sensor.pv_p' }] },
+  grid: {
+    power_import: 'sensor.gimp',
+    power_export: 'sensor.gexp',
+    energy_import: ['sensor.imp1', 'sensor.imp2'],
+    energy_export: ['sensor.exp1', 'sensor.exp2']
+  },
+  house: { power: 'auto', energy: 'auto', unmetered: { name: 'Niezmierzone' } },
+  groups: [{ name: 'Ogrzewanie', devices: [{ name: 'Pompa', power: 'sensor.pompa_p', energy: 'sensor.pompa_e' }] }]
+});
+document.body.appendChild(ce);
+ce._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+ce.hass = hassE;
+await new Promise((r) => setTimeout(r, 30));
+
+ok(ce._missing.size === 0, `„auto" nie jest traktowane jak encja: ${[...ce._missing].join(', ') || 'brak zgłoszeń'}`);
+const sm = ce._m.house.summary;
+ok(Math.abs(ce._m.grid.energyImport - 17.44) < 0.001, `pobór sumuje obie strefy taryfowe: ${ce._m.grid.energyImport} kWh`);
+ok(ce._m.grid.energyExport === 5, `oddanie sumuje obie strefy: ${ce._m.grid.energyExport} kWh`);
+ok(Math.abs(sm.consumed - 97.24) < 0.01, `realne zużycie domu = PV + pobór − oddanie: ${sm.consumed} kWh`);
+ok(Math.abs(sm.selfUsed - 79.8) < 0.01, `zużyte z PV: ${sm.selfUsed} kWh`);
+ok(sm.selfConsumption === 94, `autokonsumpcja: ${sm.selfConsumption}%`);
+ok(sm.selfSufficiency === 82, `samowystarczalność: ${sm.selfSufficiency}%`);
+ok(ce._m.house.power === 10060, `moc domu z bilansu: ${ce._m.house.power} W (16700 − 6640)`);
+
+const box = ce.shadowRoot.getElementById('summary');
+ok(!box.classList.contains('hidden'), 'pasek podsumowania widoczny');
+const stat = (k) => box.querySelector(`[data-stat="${k}"]`);
+ok(stat('produced').querySelector('.val').textContent === '84,8 kWh', `kafelek produkcji: ${stat('produced').querySelector('.val').textContent}`);
+ok(stat('consumed').querySelector('.val').textContent === '97,2 kWh', `kafelek zużycia domu: ${stat('consumed').querySelector('.val').textContent}`);
+ok(stat('exported').querySelector('.sub').textContent === '6% produkcji', `podpis oddanego: ${stat('exported').querySelector('.sub').textContent}`);
+ok(stat('imported').querySelector('.sub').textContent === '18% zużycia', `podpis pobranego: ${stat('imported').querySelector('.sub').textContent}`);
+
+const um = ce._m.groups.find((g) => g.virtual);
+ok(!!um, 'grupa niezmierzona istnieje');
+ok(um.power === 10039, `niezmierzone = dom − zmierzone: ${um.power} W (10060 − 21)`);
+ok(Math.abs(um.energy - 96.47) < 0.01, `niezmierzona energia: ${um.energy} kWh (97,24 − 0,77)`);
+ok(ce._m.groups.filter((g) => !g.virtual).reduce((t, g) => t + g.power, 0) === 21, 'grupa wirtualna nie wchodzi do sumy odbiorników');
+const umTile = ce.shadowRoot.querySelector('[data-group="__unmetered"]');
+ok(!!umTile && umTile.classList.contains('est'), 'kafelek niezmierzony ma przerywaną ramkę');
+ok(!umTile.querySelector('.grp-chev'), 'kafelek niezmierzony nie ma strzałki rozwijania');
+ok(umTile.querySelector('[data-f="pwr"]').textContent === '10,0 kW', `moc na kafelku: ${umTile.querySelector('[data-f="pwr"]').textContent}`);
+
+console.log('\n— nagłówek karty —');
+ok(!card.shadowRoot.querySelector('.kicker'), 'brak domyślnego nadtytułu');
+ok(!card.shadowRoot.textContent.includes('karta niestandardowa'), 'napis „karta niestandardowa" nie pojawia się sam');
+const kick = document.createElement('energy-flow-card');
+kick.setConfig({ type: 'custom:energy-flow-card', title: 'X', kicker: 'Mój nadtytuł', groups: [] });
+document.body.appendChild(kick);
+kick.hass = hass;
+ok(kick.shadowRoot.querySelector('.kicker').textContent === 'Mój nadtytuł', 'własny nadtytuł nadal działa');
+
 console.log('\n— autonomia z encji zamiast wyliczenia —');
 const hass9 = {
   themes: { darkMode: true },

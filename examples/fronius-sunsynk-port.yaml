@@ -1,41 +1,42 @@
-# Port konfiguracji z sunsynk-power-flow-card (Fronius Symo + Smart Meter 63A + Sonoff/Shelly)
-# Akumulator pominięty — w źródłowej konfiguracji było show_battery: false.
+# =============================================================================
+# Energy Flow Card — pełna konfiguracja
+# Fronius Symo (2 falowniki) + Smart Meter 63A + Shelly Pro 3EM + 13× Sonoff Dual R3
 #
-# Zasada: pole `power` = moc chwilowa (W/kW), pole `energy` = licznik narastający (kWh).
+# Zasada: `power` = moc chwilowa (W/kW), `energy` = licznik narastający (kWh).
 # Węzeł domu sumuje moc wszystkich urządzeń z grup poniżej.
 #
-# DO SPRAWDZENIA po wgraniu — karta sama wypisze w konsoli (F12) każde błędne id
-# jako „brak encji", więc wystarczy zerknąć tam po odświeżeniu:
-#   1. sensor.sonoff_dual_r3_*_power_1 / _power_2  — nazwy wg wzorca integracji SonoffLAN,
-#   2. sensor.shellypro3em_fce8c0daec00_power      — w części wersji: _total_active_power,
-#   3. moc rekuperatora — encja źródłowa licznika sensor.rekuperator_dzis,
-#   4. kierunek sieci — patrz komentarz przy `grid:`.
+# Po wgraniu sprawdź konsolę przeglądarki (F12) — karta wypisuje każde nieistniejące
+# entity_id, a w interfejsie pokazuje przy nim „brak encji".
+# =============================================================================
 
 type: custom:energy-flow-card
 title: Przepływ energii
 subtitle: Fronius Symo · Smart Meter 63A
 theme_mode: auto
+language: auto
 animate: true
 legend: true
 history: true
+layout_button: true
 idle_threshold: 15
 
 solar:
   name: Fotowoltaika łącznie
   power: sensor.pv_total_power
   energy: sensor.pv_total_energy_today
-  # strona AC — z samego falownika, nie z licznika (licznik widzi cały dom, nie falownik)
+  # Moc znamionowa AC obu falowników — daje procent wykorzystania przy sumie.
+  # SPRAWDŹ: to ma być moc falowników, nie paneli.
+  max_power: 24900
+  # Strona AC — z samego falownika, nie z licznika (licznik widzi cały dom).
   voltage: sensor.falownik_1_napiecie_pradu_zmiennego
   current: sensor.falownik_1_prad_zmienny
   frequency: sensor.falownik_1_czestotliwosc
   status: sensor.falownik_1_status_message
-  # moc znamionowa AC obu falowników — daje procent wykorzystania przy sumie
-  max_power: 24900
   strings:
     - name: Falownik 1
       icon: panel
       power: sensor.solarnet_1_fotowoltaika
-      energy: sensor.falownik_1_energia_z_dnia   # 4237 Wh → karta przeliczy na kWh
+      energy: sensor.falownik_1_energia_z_dnia
       voltage: sensor.falownik_1_napiecie_pradu_stalego
       current: sensor.falownik_1_prad_staly
       max_power: 14900
@@ -49,32 +50,32 @@ solar:
 
 grid:
   name: Sieć
-  # Dwie osobne encje zamiast jednej ze znakiem — zero ryzyka pomyłki kierunku.
-  # Fronius wystawia je gotowe: import 0 W / export 2734 W przy nadwyżce.
+  # Dwie encje kierunkowe zamiast jednej ze znakiem — nie da się pomylić kierunku.
   power_import: sensor.solarnet_1_power_grid_import
   power_export: sensor.solarnet_1_power_grid_export
-  # Alternatywa (jedna encja ze znakiem, ujemna = oddawanie — bez `invert`):
+  # Alternatywa (jedna encja ze znakiem, ujemna = oddawanie, bez `invert`):
   #   power: sensor.smart_meter_63a_realna_moc
   #
-  # UWAGA: to liczniki od uruchomienia instalacji (38,66 / 35,21 MWh), nie dzienne.
-  # Fronius nie ma dziennych liczników sieci — trzeba zrobić utility_meter (patrz niżej).
+  # UWAGA: liczniki od uruchomienia instalacji (38,66 / 35,21 MWh), nie dzienne.
+  # Dla „↓ dzisiaj / ↑ dzisiaj" użyj utility_meter — blok na końcu pliku.
   energy_import: sensor.smart_meter_63a_energia_rzeczywista_plus
   energy_export: sensor.smart_meter_63a_energia_rzeczywista_minus
 
 house:
   name: Dom
-  # Bez `power:` węzeł domu sumuje moc WSZYSTKICH urządzeń z grup poniżej.
+  # `auto` = bilans: fotowoltaika + sieć − akumulator.
+  # Suma odbiorników dawała 21 W przy 16,7 kW produkcji i 6,64 kW oddawania,
+  # bo opomiarowany jest ułamek instalacji. Bilans pokazuje realne ~10 kW.
   #
-  # Alternatywy, gdyby suma odbiorników była niepełna:
-  #   power: sensor.solarnet_1_obciazenie   → realne zużycie całego domu z Froniusa
-  #                                           (SPRAWDŹ znak; jeśli ujemny, dodaj `invert: true`)
-  #   power: auto                           → bilans: PV + sieć − akumulator
-  #
-  # NIE UŻYWAJ sensor.solarnet_1_power_load_consumed — u Ciebie zwraca stałe 0 W.
-  #
-  # Fronius liczy autonomię sam, więc nie musimy jej wyliczać z bilansu:
+  # Alternatywy:
+  #   (usuń linię)                        → suma moc urządzeń z grup poniżej
+  #   power: sensor.solarnet_1_obciazenie → zużycie domu wprost z Froniusa
+  #                                         (SPRAWDŹ znak; jeśli ujemny → `invert: true`)
+  # NIE UŻYWAJ sensor.solarnet_1_power_load_consumed — zwraca stałe 0 W.
+  power: auto
   self_sufficiency: sensor.solarnet_1_autonomia_wzgledna
-  # licznik od uruchomienia instalacji — dla „dzisiaj" zrób utility_meter (patrz niżej)
+  # UWAGA: to licznik od uruchomienia instalacji (38,66 MWh) — pokazuje MWh, nie „dzisiaj".
+  # Podmień na utility_meter dobowy (blok na końcu pliku).
   energy: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
 
 groups:
@@ -84,6 +85,8 @@ groups:
     devices:
       - name: Rekuperator
         icon: fan
+        # SPRAWDŹ: sensor.rekuperator_dzis to dzienny licznik energii (mimo kW i device_class: power).
+        # Encja mocy chwilowej — ta, z której liczony jest ten licznik:
         # power: sensor.rekuperator_moc
         energy: sensor.rekuperator_dzis
 
@@ -93,134 +96,172 @@ groups:
     devices:
       - name: Pompa ciepła
         icon: climate
+        # SPRAWDŹ: Shelly Pro 3EM mierzy 3 fazy — ta encja może być tylko jedną z nich.
+        # Suma trzech faz to zwykle sensor.shellypro3em_..._total_active_power
         power: sensor.shellypro3em_fce8c0daec00_power
+        # UWAGA: 620,6 kWh to licznik od podłączenia Shelly, nie „dzisiaj".
+        # Zrób utility_meter dobowy — blok na końcu pliku.
         energy: sensor.shellypro3em_fce8c0daec00_energy
 
-  # Każdy moduł Sonoff Dual R3 ma własny wiersz z SUMĄ obu kanałów,
-  # a po kliknięciu rozwija kanały jako osobne pozycje z własną mocą i energią.
-  # Nazwy „Kanał 1/2" możesz podmienić na opisowe (np. „Napowietrzanie stawu”).
+  # Każdy moduł pokazuje sumę obu kanałów i rozwija je po kliknięciu.
   - name: Gniazdka Sonoff
     icon: plug
     devices:
-      - name: Sonoff 1
+      - name: H kampy
         icon: plug
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: Lampy
+            icon: bulb
             power: sensor.sonoff_dual_r3_1_power_1
             energy: sensor.sonoff_dual_r3_1_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Podświetlacze
+            icon: bulb
             power: sensor.sonoff_dual_r3_1_power_2
             energy: sensor.sonoff_dual_r3_1_energy_2_daily
-      - name: Sonoff 2
+
+      - name: Klony
         icon: plug
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: Klony
+            icon: bulb
             power: sensor.sonoff_dual_r3_2_power_1
             energy: sensor.sonoff_dual_r3_2_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: zew. przy drzwwiach do domu
+            icon: bulb
             power: sensor.sonoff_dual_r3_2_power_2
             energy: sensor.sonoff_dual_r3_2_energy_2_daily
+
+      - name: Sonoff 3
+        icon: plug
+        devices:
+          - name: 1
+            power: sensor.sonoff_dual_r3_3_power_1
+            energy: sensor.sonoff_dual_r3_3_energy_1_daily
+          - name: 2
+            power: sensor.sonoff_dual_r3_3_power_2
+            energy: sensor.sonoff_dual_r3_3_energy_2_daily
+
       - name: Sonoff 4
         icon: plug
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: Napowietrzanie stawu
+            icon: water
             power: sensor.sonoff_dual_r3_4_power_1
             energy: sensor.sonoff_dual_r3_4_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Gniazdko przy falowniku
             power: sensor.sonoff_dual_r3_4_power_2
             energy: sensor.sonoff_dual_r3_4_energy_2_daily
-      - name: Sonoff 5
+
+      - name: Tył
         icon: plug
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: 1
             power: sensor.sonoff_dual_r3_5_power_1
             energy: sensor.sonoff_dual_r3_5_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Tył domu
+            icon: bulb
             power: sensor.sonoff_dual_r3_5_power_2
             energy: sensor.sonoff_dual_r3_5_energy_2_daily
+
+      - name: Lampy
+        icon: bulb
+        devices:
+          - name: Przy śmietniku
+            icon: bulb
+            power: sensor.sonoff_dual_r3_6_power_1
+            energy: sensor.sonoff_dual_r3_6_energy_1_daily
+          - name: Przy furtce
+            icon: bulb
+            power: sensor.sonoff_dual_r3_6_power_2
+            energy: sensor.sonoff_dual_r3_6_energy_2_daily
+
+      - name: Sonoff 7
+        icon: plug
+        devices:
+          - name: 1
+            power: sensor.sonoff_dual_r3_7_power_1
+            energy: sensor.sonoff_dual_r3_7_energy_1_daily
+          - name: 2
+            power: sensor.sonoff_dual_r3_7_power_2
+            energy: sensor.sonoff_dual_r3_7_energy_2_daily
+
       - name: Sonoff 8
         icon: plug
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: 1
             power: sensor.sonoff_dual_r3_8_power_1
             energy: sensor.sonoff_dual_r3_8_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: 2
             power: sensor.sonoff_dual_r3_8_power_2
             energy: sensor.sonoff_dual_r3_8_energy_2_daily
+
       - name: Sonoff 9
         icon: plug
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: Napowietrzanie stawu
+            icon: water
             power: sensor.sonoff_dual_r3_9_power_1
             energy: sensor.sonoff_dual_r3_9_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Gniazdko przy falowniku
             power: sensor.sonoff_dual_r3_9_power_2
             energy: sensor.sonoff_dual_r3_9_energy_2_daily
+
       - name: Sonoff 10
         icon: plug
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: 1
             power: sensor.sonoff_dual_r3_10_power_1
             energy: sensor.sonoff_dual_r3_10_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Kinkiet Piwniczka
+            icon: bulb
             power: sensor.sonoff_dual_r3_10_power_2
             energy: sensor.sonoff_dual_r3_10_energy_2_daily
-      - name: Sonoff 11
-        icon: plug
+
+      - name: Altana
+        icon: bulb
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: Środek tył
+            icon: bulb
             power: sensor.sonoff_dual_r3_11_power_1
             energy: sensor.sonoff_dual_r3_11_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Boki
+            icon: bulb
             power: sensor.sonoff_dual_r3_11_power_2
             energy: sensor.sonoff_dual_r3_11_energy_2_daily
-      - name: Sonoff 12
-        icon: plug
+
+      - name: Staw 1
+        icon: water
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: Murki
+            icon: bulb
             power: sensor.sonoff_dual_r3_12_power_1
             energy: sensor.sonoff_dual_r3_12_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Schody
+            icon: bulb
             power: sensor.sonoff_dual_r3_12_power_2
             energy: sensor.sonoff_dual_r3_12_energy_2_daily
-      - name: Sonoff 13
-        icon: plug
+
+      - name: Staw 2
+        icon: water
         devices:
-          - name: Kanał 1
-            icon: plug
+          - name: Podświetlacze
+            icon: bulb
             power: sensor.sonoff_dual_r3_13_power_1
             energy: sensor.sonoff_dual_r3_13_energy_1_daily
-          - name: Kanał 2
-            icon: plug
+          - name: Ścieżka
+            icon: bulb
             power: sensor.sonoff_dual_r3_13_power_2
             energy: sensor.sonoff_dual_r3_13_energy_2_daily
 
 grid_options:
   columns: full
   rows: auto
-# ---------------------------------------------------------------------------
-# BRAKUJĄCE DANE — do configuration.yaml, potem podmień encje w `grid:` wyżej.
+
+# =============================================================================
+# BRAKUJĄCE DANE — do configuration.yaml, potem podmień encje w `grid:` i `house:`.
 #
 # Fronius wystawia liczniki sieci tylko od uruchomienia instalacji (38,66 MWh),
-# więc „↓ dzisiaj / ↑ dzisiaj" wymaga własnych liczników dobowych:
+# więc „dzisiaj" wymaga własnych liczników dobowych:
 #
 # utility_meter:
 #   grid_import_daily:
@@ -233,8 +274,13 @@ grid_options:
 #     source: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
 #     cycle: daily
 #
-# Po restarcie:
+# Po restarcie HA:
 #   grid.energy_import: sensor.grid_import_daily
 #   grid.energy_export: sensor.grid_export_daily
 #   house.energy:       sensor.dom_zuzycie_daily
-# ---------------------------------------------------------------------------
+#
+# Opcjonalnie — poprawka błędnej klasy licznika rekuperatora (customize.yaml):
+#   sensor.rekuperator_dzis:
+#     device_class: energy
+#     unit_of_measurement: kWh
+# =============================================================================

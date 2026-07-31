@@ -7,7 +7,7 @@
 import PL from './lang-pl.js';
 import EN from './lang-en.js';
 
-const EFC_VERSION = '1.3.0';
+const EFC_VERSION = '1.4.0';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -334,6 +334,7 @@ const STYLES = `
   display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--colmin,215px),1fr));
   gap:10px;align-content:start;
 }
+.group.est { border-style:dashed;opacity:.85; }
 .group {
   position:relative;z-index:1;border:1px solid var(--line);border-radius:14px;background:var(--panel);
   box-shadow:0 1px 2px var(--sh);align-self:start;width:100%;
@@ -359,6 +360,18 @@ const STYLES = `
 .dev-chev { font-size:10px;color:var(--mut);width:9px;text-align:center;flex:none; }
 .dev-body { display:flex;flex-direction:column; }
 .dev-body .dev .n { color:var(--mut); }
+
+.summary {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;margin-top:14px;
+  border:1px solid var(--line);border-radius:12px;background:var(--line);overflow:hidden;
+}
+.stat { background:var(--card);padding:11px 13px;display:flex;flex-direction:column;gap:5px;min-width:0; }
+.stat .cap { font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.stat .val { font-size:16px;font-weight:600;white-space:nowrap; }
+.stat .sub { font-size:10px;color:var(--mut);white-space:nowrap;min-height:13px; }
+.stat.solar .val { color:var(--solar); }
+.stat.cons .val { color:var(--cons); }
+.stat.grid .val { color:var(--grid); }
 
 .legend {
   display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px;padding:11px 14px;
@@ -540,7 +553,8 @@ class EnergyFlowCard extends HTMLElement {
     const c = {
       title: raw.title !== undefined ? raw.title : 'Przepływ energii',
       subtitle: raw.subtitle || '',
-      kicker: raw.kicker !== undefined ? raw.kicker : 'Home Assistant · karta niestandardowa',
+      /* nadtytuł tylko wtedy, gdy ktoś świadomie go wpisze */
+      kicker: raw.kicker || '',
       header: raw.header !== false && (raw.title !== '' || raw.subtitle),
       legend: raw.legend !== false,
       animate: raw.animate !== false,
@@ -639,8 +653,23 @@ class EnergyFlowCard extends HTMLElement {
       name: g.name || null,
       icon: g.icon || 'plug',
       expanded: !!g.expanded,
+      virtual: false,
       devices: (g.devices || []).map((d, j) => normDevice(d, 'd' + i + '_' + j, !!g.invert))
     }));
+
+    /* reszta domu = moc domu − suma opomiarowanych grup; ma sens tylko wtedy,
+       gdy moc domu pochodzi z bilansu albo osobnej encji, a nie z sumy tych grup */
+    const um = raw.house && raw.house.unmetered;
+    if (um && c.house.power) {
+      c.groups.push({
+        id: '__unmetered',
+        name: (um.name || null),
+        icon: (um.icon || 'plug'),
+        expanded: false,
+        virtual: true,
+        devices: []
+      });
+    }
 
     return c;
   }
@@ -833,7 +862,7 @@ class EnergyFlowCard extends HTMLElement {
     const groupsHtml = g
       .map(
         (grp, gi) => `
-      <div class="group" data-group="${esc(grp.id)}">
+      <div class="group ${grp.virtual ? 'est' : ''}" data-group="${esc(grp.id)}">
         <div class="grp-head" data-toggle="${esc(grp.id)}">
           ${nodeSvg(19, grp.icon)}
           <div class="grp-txt">
@@ -841,7 +870,7 @@ class EnergyFlowCard extends HTMLElement {
             <div class="mono grp-meta" data-f="meta">—</div>
           </div>
           <span class="mono grp-pwr" data-f="pwr">—</span>
-          <span class="grp-chev" data-f="chev">▸</span>
+          ${grp.virtual ? '' : '<span class="grp-chev" data-f="chev">▸</span>'}
         </div>
         <div class="grp-body hidden" data-body="${esc(grp.id)}">
           ${grp.devices.map((d) => devRow(d, 0)).join('')}
@@ -947,6 +976,14 @@ class EnergyFlowCard extends HTMLElement {
     </div>
   </div>
 
+  <div class="summary hidden" id="summary">
+    <div class="stat solar" data-stat="produced"><div class="cap">${t('sum_produced')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
+    <div class="stat cons" data-stat="consumed"><div class="cap">${t('sum_consumed')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
+    <div class="stat solar" data-stat="selfUsed"><div class="cap">${t('sum_self_used')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
+    <div class="stat grid" data-stat="exported"><div class="cap">${t('sum_exported')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
+    <div class="stat grid" data-stat="imported"><div class="cap">${t('sum_imported')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
+  </div>
+
   ${
     c.legend
       ? `<div class="legend">
@@ -998,6 +1035,7 @@ class EnergyFlowCard extends HTMLElement {
       card: root.getElementById('card'),
       grid: root.getElementById('grid'),
       groups: root.getElementById('groups'),
+      summary: root.getElementById('summary'),
       strings: root.getElementById('strings'),
       stringlist: root.getElementById('stringlist'),
       slHead: root.getElementById('sl-head'),
@@ -1107,6 +1145,39 @@ class EnergyFlowCard extends HTMLElement {
     if (own !== null) return Math.round(Math.max(0, Math.min(100, own)));
     if (!(power > 0)) return 100;
     return Math.round((100 * Math.max(0, power - gridImport)) / power);
+  }
+
+  /* energia domu z bilansu, reszta niezmierzona i podsumowanie dnia */
+  _fillDerived(house, groups, solar, grid, consSum, consNrg) {
+    const pv = solar && solar.energy != null ? solar.energy : null;
+    const imp = grid && grid.energyImport != null ? grid.energyImport : null;
+    const exp = grid && grid.energyExport != null ? grid.energyExport : null;
+
+    /* zużycie domu = produkcja + pobór − oddanie */
+    if (this._cfg.house.energy === 'auto') {
+      house.energy = pv !== null && imp !== null ? pv + imp - (exp || 0) : null;
+    }
+
+    const um = groups.find((g) => g.virtual);
+    if (um) {
+      um.power = Math.max(0, Math.round((house.power || 0) - consSum));
+      um.energy = house.energy != null ? Math.max(0, house.energy - consNrg) : null;
+      um.idle = um.power < this._cfg.idle_threshold;
+    }
+
+    house.summary = {
+      produced: pv,
+      consumed: house.energy != null ? house.energy : null,
+      exported: exp,
+      imported: imp,
+      /* z produkcji: ile zużyte na miejscu, ile oddane */
+      selfUsed: pv !== null && exp !== null ? Math.max(0, pv - exp) : null,
+      selfConsumption: pv > 0 && exp !== null ? Math.round((100 * Math.max(0, pv - exp)) / pv) : null,
+      selfSufficiency:
+        house.energy > 0 && imp !== null
+          ? Math.round((100 * Math.max(0, house.energy - imp)) / house.energy)
+          : null
+    };
   }
 
   _model() {
@@ -1263,6 +1334,13 @@ class EnergyFlowCard extends HTMLElement {
     const flatten = (list) => list.reduce((a, d) => a.concat([d], flatten(d.children)), []);
 
     const groups = c.groups.map((g, gi) => {
+      if (g.virtual) {
+        return {
+          id: g.id, name: g.name || this._tx('unmetered'), icon: g.icon, virtual: true,
+          devices: [], all: [], leafCount: 0, power: 0, energy: null, active: 0,
+          off: false, idle: true, powerEntities: [], energyEntities: []
+        };
+      }
       const devices = g.devices.map(buildDevice);
       const all = flatten(devices);
       const sum = devices.reduce((t, d) => t + (d.off || d.unset ? 0 : d.power), 0);
@@ -1286,8 +1364,9 @@ class EnergyFlowCard extends HTMLElement {
       };
     });
 
-    const consSum = groups.reduce((t, g) => t + g.power, 0);
-    const consNrg = groups.reduce((t, g) => t + g.energy, 0);
+    const real = groups.filter((g) => !g.virtual);
+    const consSum = real.reduce((t, g) => t + g.power, 0);
+    const consNrg = real.reduce((t, g) => t + g.energy, 0);
 
     /* `power: auto` — bilans węzła zamiast osobnej encji zużycia:
        zużycie = fotowoltaika + sieć(+pobór/−oddanie) − akumulator(+ładowanie) */
@@ -1299,18 +1378,19 @@ class EnergyFlowCard extends HTMLElement {
       const house0 = {
         name: c.house.name || this._tx('house'),
         power: Math.max(0, Math.round(derived)),
-        energy: c.house.energy ? this._energy(c.house.energy).v : consNrg,
+        energy: c.house.energy && c.house.energy !== 'auto' ? this._energy(c.house.energy).v : consNrg,
         derived: true,
         powerEntities: (solar ? solar.powerEntities : []).concat(grid ? grid.powerEntities : []),
-        energyEntities: c.house.energy ? asList(c.house.energy) : []
+        energyEntities: c.house.energy && c.house.energy !== 'auto' ? asList(c.house.energy) : []
       };
       const gi0 = grid && !grid.off && grid.power > 0 ? grid.power : 0;
       house0.selfPct = this._selfPct(house0.power, gi0);
+      this._fillDerived(house0, groups, solar, grid, consSum, consNrg);
       return { strings, solar, grid, battery, groups, house: house0 };
     }
 
     const hp = c.house.power ? this._power(c.house.power, c.house.invert) : null;
-    const he = c.house.energy ? this._energy(c.house.energy) : null;
+    const he = c.house.energy && c.house.energy !== 'auto' ? this._energy(c.house.energy) : null;
     const house = {
       name: c.house.name || this._tx('house'),
       power: hp && !hp.off ? hp.v : consSum,
@@ -1318,7 +1398,7 @@ class EnergyFlowCard extends HTMLElement {
       powerEntities: c.house.power
         ? asList(c.house.power)
         : groups.reduce((a, g) => a.concat(g.powerEntities), []),
-      energyEntities: c.house.energy
+      energyEntities: c.house.energy && c.house.energy !== 'auto'
         ? asList(c.house.energy)
         : groups.reduce((a, g) => a.concat(g.energyEntities), [])
     };
@@ -1326,6 +1406,7 @@ class EnergyFlowCard extends HTMLElement {
     const gridImport = grid && !grid.off && grid.power > 0 ? grid.power : 0;
     house.selfPct = this._selfPct(house.power, gridImport);
 
+    this._fillDerived(house, groups, solar, grid, consSum, consNrg);
     return { strings, solar, grid, battery, groups, house };
   }
 
@@ -1608,9 +1689,46 @@ class EnergyFlowCard extends HTMLElement {
     const colMin = this._narrow ? 150 : totalDevices > 18 ? 190 : 215;
     this._q.groups.style.setProperty('--colmin', colMin + 'px');
 
+    this._fillSummary(m, t);
     this._applyExpansion();
     this._applyLayout();
     this._measure();
+  }
+
+  /* pasek podsumowania dnia: produkcja, zużycie, oddane, pobrane */
+  _fillSummary(m, t) {
+    const box = this._q.summary;
+    if (!box) return;
+    if (this._cfg.summary === false || !m.house.summary) {
+      box.classList.add('hidden');
+      return;
+    }
+    const s = m.house.summary;
+    let shown = 0;
+    box.querySelectorAll('[data-stat]').forEach((el) => {
+      const key = el.dataset.stat;
+      const v = s[key];
+      if (v === null || v === undefined) {
+        el.classList.add('hidden');
+        return;
+      }
+      el.classList.remove('hidden');
+      shown++;
+      el.querySelector('.val').textContent = fmtKwh(v);
+      const sub = el.querySelector('.sub');
+      if (key === 'selfUsed' && s.selfConsumption !== null) {
+        sub.textContent = t('sum_of_production', { n: s.selfConsumption });
+      } else if (key === 'exported' && s.selfConsumption !== null) {
+        sub.textContent = t('sum_of_production', { n: 100 - s.selfConsumption });
+      } else if (key === 'consumed' && s.selfSufficiency !== null) {
+        sub.textContent = t('sum_self_sufficiency', { n: s.selfSufficiency });
+      } else if (key === 'imported' && s.selfSufficiency !== null) {
+        sub.textContent = t('sum_of_consumption', { n: 100 - s.selfSufficiency });
+      } else {
+        sub.textContent = '';
+      }
+    });
+    box.classList.toggle('hidden', shown === 0);
   }
 
   /* ------------------------------------------------------------- układ */

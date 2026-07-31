@@ -80,7 +80,7 @@ groups:
 |------------------|---------|----------------------------------|------|
 | `type`           | string  | —                                | `custom:energy-flow-card` |
 | `title`          | string  | `Przepływ energii`               | Tytuł nad kartą; `''` ukrywa nagłówek |
-| `kicker`         | string  | `Home Assistant · karta niestandardowa` | Mały nadtytuł |
+| `kicker`         | string  | —                                | Mały nadtytuł nad tytułem; domyślnie nie jest pokazywany |
 | `subtitle`       | string  | —                                | Opis pod tytułem |
 | `theme_mode`     | string  | `auto`                           | `auto` \| `dark` \| `light` |
 | `language`       | string  | `auto`                           | `auto` \| `pl` \| `en`. `auto` bierze język z Home Assistanta, nieznany język spada na polski |
