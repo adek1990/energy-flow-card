@@ -83,6 +83,8 @@ groups:
 | `kicker`         | string  | `Home Assistant · karta niestandardowa` | Mały nadtytuł |
 | `subtitle`       | string  | —                                | Opis pod tytułem |
 | `theme_mode`     | string  | `auto`                           | `auto` \| `dark` \| `light` |
+| `language`       | string  | `auto`                           | `auto` \| `pl` \| `en`. `auto` bierze język z Home Assistanta, nieznany język spada na polski |
+| `layout_button`  | bool    | `true`                           | Przycisk `⠿ Układ` w rogu karty |
 | `animate`        | bool    | `true`                           | Animacja przepływu na liniach |
 | `legend`         | bool    | `true`                           | Legenda kolorów pod kartą |
 | `history`        | bool    | `true`                           | Okno historii po kliknięciu węzła (`false` → standardowe „więcej informacji") |
@@ -93,12 +95,19 @@ groups:
 
 Sekcja pojawia się tylko wtedy, gdy jest co najmniej jeden string.
 
-| Opcja     | Opis |
-|-----------|------|
-| `name`    | Nazwa węzła zbiorczego (domyślnie `Fotowoltaika łącznie`) |
-| `power`   | Encja mocy łącznej; bez niej karta sumuje stringi |
-| `energy`  | Encja energii dziennej łącznej; bez niej karta sumuje stringi |
-| `strings` | Lista: `name`, `icon`, `power`, `energy` |
+| Opcja       | Opis |
+|-------------|------|
+| `name`      | Nazwa węzła zbiorczego (domyślnie `Fotowoltaika łącznie`) |
+| `power`     | Encja mocy łącznej; bez niej karta sumuje stringi |
+| `energy`    | Encja energii dziennej łącznej; bez niej karta sumuje stringi |
+| `voltage` / `current` / `frequency` | Strona AC falownika — pokazywane pod sumą jako `240,0 V · 3,60 A · 49,90 Hz` |
+| `status`    | Encja stanu pracy falownika (tekst wyświetlany z kropką pod wartościami) |
+| `max_power` | Moc znamionowa falownika w W → procent wykorzystania przy sumie. Bez niej karta sumuje `max_power` stringów |
+| `strings`   | Lista: `name`, `icon`, `power`, `energy`, `voltage`, `current`, `max_power` |
+
+Każdy string z `voltage`/`current`/`max_power` dostaje wiersz `620,4 V · 11,04 A` oraz procent
+wykorzystania z paskiem. Procent liczy się jako `moc / max_power`; wartości powyżej 100% są
+pokazywane liczbowo, ale pasek zatrzymuje się na 100%.
 
 ### `grid`
 
@@ -149,17 +158,29 @@ Encja `energy` jest opcjonalna — bez niej urządzenie pokazuje `—` w kolumni
 w oknie historii są liczone przez całkowanie mocy. Urządzenie z samą encją `energy` nie jest
 traktowane jako awaria: pokazuje `—` w kolumnie mocy i nie jest wygaszane.
 
+### Język
+
+Interfejs karty jest tłumaczony przez pliki `dist/lang-pl.js` i `dist/lang-en.js`. Nowy język to
+kopia jednego z nich i wpis w mapie `LANGS` na górze `energy-flow-card.js`. Tłumaczenie obejmuje też
+formaty liczb (`6,20 kW` vs `6.20 kW`), nazwy miesięcy, dni tygodnia i odmianę liczebników
+(polskie 1 / 2‑4 / 5+).
+
 ### Układ węzłów: przeciąganie myszą
 
-Domyślnie węzły rozkładają się same. Sekcja **Układ węzłów** w edytorze pozwala przejść na
-pozycjonowanie swobodne i ustawić je myszą:
+Domyślnie węzły rozkładają się same. W rogu karty jest przycisk **⠿ Układ** — działa w normalnym
+widoku, bez wchodzenia w edytor Home Assistanta:
 
-1. Włącz **Swobodne pozycjonowanie** — węzły zostają dokładnie tam, gdzie były, tylko przechodzą
-   na współrzędne procentowe.
-2. Włącz **Tryb przeciągania** — pojawiają się przerywane uchwyty i plakietka `⠿ Układ`.
-3. Przeciągnij węzły w podglądzie. Łączniki przeliczają się w trakcie ruchu, a pozycje zapisują się
-   do konfiguracji automatycznie.
-4. Wyłącz tryb przeciągania, gdy skończysz — kliknięcie węzła znów otwiera historię.
+1. Kliknij **⠿ Układ** — pojawiają się przerywane uchwyty oraz przyciski `Kopiuj YAML` i `Reset`.
+2. Przeciągnij węzły. Łączniki przeliczają się w trakcie ruchu, a układ zapisuje się od razu
+   w `localStorage` tej przeglądarki.
+3. **Kopiuj YAML** wkleja gotowy blok `layout:` do schowka — wklej go do konfiguracji karty, aby
+   układ obowiązywał na wszystkich urządzeniach i przeglądarkach.
+4. **Reset** czyści zapis lokalny i wraca do układu z konfiguracji.
+5. Kliknij **✓ Gotowe** — kliknięcie węzła znów otwiera historię.
+
+Zapis lokalny jest kluczowany odciskiem konfiguracji razem z blokiem `layout`, więc zmiana pozycji
+w YAML-u unieważnia stary zapis, zamiast być przez niego nadpisywana. Przycisk można ukryć
+opcją `layout_button: false`; te same ustawienia są też w sekcji **Układ węzłów** edytora GUI.
 
 ```yaml
 layout:

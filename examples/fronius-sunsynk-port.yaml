@@ -24,13 +24,27 @@ solar:
   name: Fotowoltaika łącznie
   power: sensor.pv_total_power
   energy: sensor.pv_total_energy_today
+  # strona AC falownika — pokazywana pod sumą, jak w sunsynk
+  voltage: sensor.smart_meter_63a_napiecie_w_fazie_1
+  current: sensor.smart_meter_63a_prad_zmienny_fazy_1
+  frequency: sensor.smart_meter_63a_srednia_faza_czestotliwosci
+  status: sensor.falownik_1_status_message
+  # SPRAWDŹ: moc znamionowa falownika (AC) — daje procent wykorzystania przy sumie.
+  # Bez niej karta zsumuje moce szczytowe stringów (14 900 + 10 000 = 24 900 W).
+  max_power: 24900
   strings:
     - name: Falownik 1
       icon: panel
       power: sensor.solarnet_1_fotowoltaika
+      voltage: sensor.falownik_1_napiecie_pradu_stalego
+      current: sensor.falownik_1_prad_staly
+      max_power: 14900
     - name: Falownik 2
       icon: panel
       power: sensor.solarnet_2_fotowoltaika
+      voltage: sensor.falownik_2_napiecie_pradu_stalego
+      current: sensor.falownik_2_prad_staly
+      max_power: 10000
 
 grid:
   name: Sieć

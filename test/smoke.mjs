@@ -441,6 +441,151 @@ ok(c6._modalHost.textContent.includes('Kanał 1'), 'historia dotyczy kliknięteg
 c6._closeModal();
 ok(c6._nodes['dev_d0_0'].powerEntities.length === 2, 'historia modułu sumuje encje obu kanałów');
 
+console.log('\n— język: pl / en / auto —');
+const langCfg = (language) => ({
+  type: 'custom:energy-flow-card',
+  language,
+  grid: { power: 'sensor.grid_p' },
+  battery: { power: 'sensor.batt_p', soc: 'sensor.batt_soc' },
+  groups: [{ name: 'Klimat', expanded: true, devices: [{ name: 'D', power: 'sensor.hp_p' }] }]
+});
+const mkLang = (language, hassLang) => {
+  const el = document.createElement('energy-flow-card');
+  el.setConfig(langCfg(language));
+  document.body.appendChild(el);
+  el._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+  el.hass = Object.assign({}, hass, { language: hassLang || 'pl' });
+  return el;
+};
+
+const lpl = mkLang('pl');
+await new Promise((r) => setTimeout(r, 30));
+ok(lpl.shadowRoot.textContent.includes('Pobór z sieci'), 'pl: etykieta sieci');
+ok(lpl.shadowRoot.textContent.includes('Ładowanie akumulatora'), 'pl: etykieta akumulatora');
+ok(lpl.shadowRoot.textContent.includes('Odbiorniki · 1 urządzenie w 1 grupie'), 'pl: odmiana liczebników');
+ok(lpl.shadowRoot.textContent.includes('Zużycie'), 'pl: legenda');
+
+const len = mkLang('en');
+await new Promise((r) => setTimeout(r, 30));
+ok(len.shadowRoot.textContent.includes('Grid import'), 'en: etykieta sieci');
+ok(len.shadowRoot.textContent.includes('Battery charging'), 'en: etykieta akumulatora');
+ok(len.shadowRoot.textContent.includes('Consumers · 1 device in 1 group'), 'en: liczba pojedyncza');
+ok(len.shadowRoot.textContent.includes('Consumption'), 'en: legenda');
+ok(len.shadowRoot.textContent.includes('self-sufficient'), 'en: wskaźnik samowystarczalności');
+ok(len.shadowRoot.getElementById('lay-toggle').textContent.includes('Layout'), 'en: przycisk układu');
+ok(len.shadowRoot.textContent.includes('6.20 kW'), `en: kropka dziesiętna: ${(len.shadowRoot.textContent.match(/6[.,]20 kW/) || ['brak'])[0]}`);
+ok(lpl.shadowRoot.textContent.includes('6,20 kW'), 'pl: przecinek dziesiętny');
+
+const lauto = mkLang('auto', 'en');
+await new Promise((r) => setTimeout(r, 30));
+ok(lauto.shadowRoot.textContent.includes('Grid import'), 'auto: język brany z Home Assistanta');
+const lauto2 = mkLang('auto', 'de');
+await new Promise((r) => setTimeout(r, 30));
+ok(lauto2.shadowRoot.textContent.includes('Pobór z sieci'), 'auto: nieznany język spada na polski');
+
+len._openModal(len._nodes.grid, 'grid');
+await new Promise((r) => setTimeout(r, 40));
+ok(len._modalHost.textContent.includes('Today') && len._modalHost.textContent.includes('7 days'), 'en: zakresy w historii');
+len._modal.range = 'custom';
+len._renderModal();
+ok([...len._modalHost.querySelectorAll('.pk-dow')].map((e) => e.textContent).join(' ') === 'Mon Tue Wed Thu Fri Sat Sun', 'en: dni tygodnia');
+ok(/January|February|March|April|May|June|July|August|September|October|November|December/.test(len._modalHost.textContent), 'en: nazwa miesiąca');
+len._closeModal();
+
+console.log('\n— PV: napięcie, prąd, wykorzystanie mocy —');
+const hass8 = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.pv1_p', 6850, 'W'),
+    S('sensor.pv1_u', 620.4, 'V'),
+    S('sensor.pv1_i', 11.04, 'A'),
+    S('sensor.pv2_p', 10.1, 'kW'),
+    S('sensor.pv2_u', 598, 'V'),
+    S('sensor.pv2_i', 16.9, 'A')
+  ]),
+  callWS: async () => ({})
+};
+const c8 = document.createElement('energy-flow-card');
+c8.setConfig({
+  type: 'custom:energy-flow-card',
+  solar: {
+    strings: [
+      { name: 'Falownik 1', power: 'sensor.pv1_p', voltage: 'sensor.pv1_u', current: 'sensor.pv1_i', max_power: 14900 },
+      { name: 'Falownik 2', power: 'sensor.pv2_p', voltage: 'sensor.pv2_u', current: 'sensor.pv2_i', max_power: 10000 }
+    ]
+  },
+  groups: []
+});
+document.body.appendChild(c8);
+c8._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+c8.hass = hass8;
+await new Promise((r) => setTimeout(r, 30));
+const s8 = c8._m.strings;
+ok(s8[0].volt === 620.4 && s8[0].amp === 11.04, `odczyt V i A: ${s8[0].volt} V / ${s8[0].amp} A`);
+ok(s8[0].pct === 46, `wykorzystanie stringu 1: ${s8[0].pct}% (6850 z 14900)`);
+ok(s8[1].pct === 101, `wykorzystanie stringu 2 powyżej 100%: ${s8[1].pct}% (10,1 kW z 10 kW)`);
+const dc0 = c8.shadowRoot.querySelector('[data-node="s_str0"] [data-f="dc"]');
+ok(!dc0.classList.contains('hidden'), 'wiersz DC widoczny, gdy podano V/A');
+ok(dc0.textContent.includes('620,4 V') && dc0.textContent.includes('11,04 A'), `wiersz DC: ${dc0.textContent}`);
+ok(dc0.textContent.includes('46%'), 'procent wykorzystania w wierszu DC');
+const bar0 = dc0.querySelector('.dc-bar i');
+ok(bar0 && bar0.style.width === '46%', `pasek wykorzystania: ${bar0 && bar0.style.width}`);
+const bar1 = c8.shadowRoot.querySelector('[data-node="s_str1"] .dc-bar i');
+ok(bar1.style.width === '100%', `pasek przycięty do 100% przy 101%: ${bar1.style.width}`);
+ok(c8._m.solar.maxPower === 24900, `moc szczytowa sumowana ze stringów: ${c8._m.solar.maxPower} W`);
+ok(c8._m.solar.pct === 68, `wykorzystanie całej instalacji: ${c8._m.solar.pct}% (16,95 z 24,9 kW)`);
+ok(c8.shadowRoot.querySelector('[data-node="solar-sum"] [data-f="ac"]').textContent.includes('68%'), 'procent w wierszu AC sumy PV');
+
+// strona AC falownika: V, A, Hz, status + własna moc znamionowa
+const hass8b = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.pv_sum', 5970, 'W'),
+    S('sensor.ac_u', 240, 'V'),
+    S('sensor.ac_i', 3.6, 'A'),
+    S('sensor.ac_f', 49.9, 'Hz'),
+    S('sensor.inv_status', 'Running')
+  ]),
+  callWS: async () => ({})
+};
+const c8c = document.createElement('energy-flow-card');
+c8c.setConfig({
+  type: 'custom:energy-flow-card',
+  solar: {
+    power: 'sensor.pv_sum',
+    max_power: 8000,
+    voltage: 'sensor.ac_u',
+    current: 'sensor.ac_i',
+    frequency: 'sensor.ac_f',
+    status: 'sensor.inv_status',
+    strings: [{ name: 'S1', power: 'sensor.pv_sum', max_power: 14900 }]
+  },
+  groups: []
+});
+document.body.appendChild(c8c);
+c8c._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+c8c.hass = hass8b;
+await new Promise((r) => setTimeout(r, 30));
+ok(c8c._m.solar.maxPower === 8000, `moc znamionowa falownika ma pierwszeństwo przed sumą stringów: ${c8c._m.solar.maxPower} W`);
+ok(c8c._m.solar.pct === 75, `wykorzystanie falownika jak w sunsynk: ${c8c._m.solar.pct}% (5,97 z 8 kW)`);
+const acRow = c8c.shadowRoot.querySelector('[data-node="solar-sum"] [data-f="ac"]').textContent;
+ok(acRow.includes('240,0 V') && acRow.includes('3,60 A') && acRow.includes('49,90 Hz'), `wiersz AC: ${acRow}`);
+ok(
+  c8c.shadowRoot.querySelector('[data-node="solar-sum"] [data-f="status"]').textContent === 'Running',
+  'stan pracy falownika przy sumie'
+);
+
+const c8b = document.createElement('energy-flow-card');
+c8b.setConfig({ type: 'custom:energy-flow-card', solar: { strings: [{ name: 'S', power: 'sensor.pv1_p' }] }, groups: [] });
+document.body.appendChild(c8b);
+c8b._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+c8b.hass = hass8;
+await new Promise((r) => setTimeout(r, 30));
+ok(
+  c8b.shadowRoot.querySelector('[data-node="s_str0"] [data-f="dc"]').classList.contains('hidden'),
+  'bez V/A i max_power wiersz DC się nie pokazuje'
+);
+
 console.log('\n— układ swobodny: przeciąganie węzłów —');
 const hass7 = {
   themes: { darkMode: true },
@@ -462,13 +607,26 @@ const mkFree = (layout) => {
   return el;
 };
 
+// przycisk na karcie, bez wchodzenia w edytor HA
+const c7start = mkFree({});
+await new Promise((r) => setTimeout(r, 30));
+const btn = c7start.shadowRoot.getElementById('lay-toggle');
+ok(!!btn && !c7start.shadowRoot.getElementById('lay-bar').classList.contains('hidden'), 'przycisk układu widoczny w normalnym trybie');
+ok(btn.textContent.includes('Układ'), `etykieta przycisku: ${btn.textContent}`);
+ok(!c7start._q.grid.classList.contains('editing'), 'domyślnie bez trybu przeciągania');
+btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(c7start._q.grid.classList.contains('free') && c7start._q.grid.classList.contains('editing'), 'klik przycisku włącza przeciąganie bez edytora HA');
+ok(btn.textContent.includes('Gotowe'), `przycisk zmienia się w „Gotowe": ${btn.textContent}`);
+ok(!c7start.shadowRoot.getElementById('lay-copy').classList.contains('hidden'), 'pojawia się „Kopiuj YAML"');
+btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(!c7start._q.grid.classList.contains('editing'), 'ponowny klik wyłącza tryb przeciągania');
+
 const c7 = mkFree({ mode: 'free', edit: true });
 await new Promise((r) => setTimeout(r, 30));
 const gridEl = c7._q.grid;
 ok(gridEl.classList.contains('free'), 'tryb swobodny włącza pozycjonowanie bezwzględne');
 ok(gridEl.classList.contains('editing'), 'tryb przeciągania dodaje uchwyty');
 ok(gridEl.style.getPropertyValue('--freeh') !== '', `wysokość karty ustawiona: ${gridEl.style.getPropertyValue('--freeh')}`);
-ok(c7.shadowRoot.getElementById('lay-badge').classList.contains('hidden') === false, 'plakietka trybu układu widoczna');
 const hubWrap = c7.shadowRoot.querySelector('[data-lay="hub"]');
 ok(hubWrap.style.left.endsWith('%') && hubWrap.style.top.endsWith('%'), `pozycja w procentach: ${hubWrap.style.left}, ${hubWrap.style.top}`);
 ok(
@@ -518,6 +676,11 @@ c7._measure();
 await new Promise((r) => setTimeout(r, 40));
 ok(!c7._q.grid.classList.contains('free'), 'poniżej 720 px wraca układ pionowy');
 ok(hubWrap.style.left === '', 'pozycje bezwzględne są zdejmowane w trybie pionowym');
+
+// zapis lokalny: układ przeżywa przeładowanie karty bez ruszania konfiguracji
+const stored = JSON.parse(window.localStorage.getItem(Object.keys(window.localStorage).find((k) => k.startsWith('efc-layout:'))));
+ok(!!stored && !!stored.nodes.hub, 'układ zapisany w localStorage po przeciągnięciu');
+ok(typeof c7._layoutYaml() === 'string' && c7._layoutYaml().includes('hub: { x:'), 'YAML układu do skopiowania');
 
 // bez trybu edycji: pozycje działają, ale bez uchwytów i z działającą historią
 const c7b = mkFree({ mode: 'free', nodes: { hub: { x: 30, y: 40 } } });

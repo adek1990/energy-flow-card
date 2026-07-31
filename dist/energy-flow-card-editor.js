@@ -286,6 +286,25 @@ class EnergyFlowCardEditor extends HTMLElement {
           this._emit();
         });
 
+        const lang = document.createElement('select');
+        lang.className = 'plain';
+        [
+          ['auto', 'Język: automatyczny (wg HA)'],
+          ['pl', 'Język: polski'],
+          ['en', 'Język: angielski']
+        ].forEach(([k, l]) => {
+          const o = document.createElement('option');
+          o.value = k;
+          o.textContent = l;
+          if ((c.language || 'auto') === k) o.selected = true;
+          lang.appendChild(o);
+        });
+        lang.addEventListener('change', () => {
+          this._config.language = lang.value;
+          this._emit();
+        });
+        b.appendChild(lang);
+
         b.appendChild(
           this._row(
             theme,
@@ -425,11 +444,38 @@ class EnergyFlowCardEditor extends HTMLElement {
             })
           )
         );
+        const usolar = (patch) => {
+          this._config.solar = Object.assign({}, this._config.solar, patch);
+          this._emit();
+        };
         b.appendChild(
-          this._entityPicker('Energia dzisiaj — łącznie (opcjonalnie)', s.energy, (v) => {
-            this._config.solar = Object.assign({}, this._config.solar, { energy: v });
-            this._emit();
-          })
+          this._row(
+            this._entityPicker('Energia dzisiaj — łącznie (opcjonalnie)', s.energy, (v) => usolar({ energy: v })),
+            this._textField('Moc znamionowa falownika (W)', s.max_power, (v) => usolar({ max_power: Number(v) || 0 }), {
+              type: 'number'
+            })
+          )
+        );
+        b.appendChild(
+          this._row(
+            this._entityPicker('Napięcie AC', s.voltage, (v) => usolar({ voltage: v })),
+            this._entityPicker('Prąd AC', s.current, (v) => usolar({ current: v }))
+          )
+        );
+        b.appendChild(
+          this._row(
+            this._entityPicker('Częstotliwość', s.frequency, (v) => usolar({ frequency: v })),
+            this._entityPicker('Stan pracy falownika', s.status, (v) => usolar({ status: v }), [
+              'sensor',
+              'binary_sensor'
+            ])
+          )
+        );
+        b.appendChild(
+          this._hint(
+            'Moc znamionowa daje procent wykorzystania przy sumie (np. 5,97 kW z 8 kW = 75%). ' +
+              'Bez niej karta sumuje moce szczytowe stringów.'
+          )
         );
         b.appendChild(
           this._hint(
@@ -481,6 +527,22 @@ class EnergyFlowCardEditor extends HTMLElement {
                 str.energy = v;
                 this._emit();
               })
+            )
+          );
+          it.appendChild(
+            this._row(
+              this._entityPicker('Napięcie DC', str.voltage, (v) => {
+                str.voltage = v;
+                this._emit();
+              }),
+              this._entityPicker('Prąd DC', str.current, (v) => {
+                str.current = v;
+                this._emit();
+              }),
+              this._textField('Moc szczytowa (W)', str.max_power, (v) => {
+                str.max_power = Number(v) || 0;
+                this._emit();
+              }, { type: 'number' })
             )
           );
           b.appendChild(it);
