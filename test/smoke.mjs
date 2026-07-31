@@ -441,6 +441,37 @@ ok(c6._modalHost.textContent.includes('Kanał 1'), 'historia dotyczy kliknięteg
 c6._closeModal();
 ok(c6._nodes['dev_d0_0'].powerEntities.length === 2, 'historia modułu sumuje encje obu kanałów');
 
+console.log('\n— autonomia z encji zamiast wyliczenia —');
+const hass9 = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.dom_p', 2000, 'W'),
+    S('sensor.siec9', 1500, 'W'),
+    S('sensor.autonomia', 100, '%')
+  ]),
+  callWS: async () => ({})
+};
+const mkSelf = (extra) => {
+  const el = document.createElement('energy-flow-card');
+  el.setConfig({
+    type: 'custom:energy-flow-card',
+    grid: { power: 'sensor.siec9' },
+    house: Object.assign({ power: 'sensor.dom_p' }, extra),
+    groups: []
+  });
+  document.body.appendChild(el);
+  el._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+  el.hass = hass9;
+  return el;
+};
+const sf1 = mkSelf({});
+await new Promise((r) => setTimeout(r, 30));
+ok(sf1._m.house.selfPct === 25, `bez encji liczone z bilansu: ${sf1._m.house.selfPct}% (2000 W, 1500 W z sieci)`);
+const sf2 = mkSelf({ self_sufficiency: 'sensor.autonomia' });
+await new Promise((r) => setTimeout(r, 30));
+ok(sf2._m.house.selfPct === 100, `encja Fronius ma pierwszeństwo: ${sf2._m.house.selfPct}%`);
+ok(sf2.shadowRoot.textContent.includes('100% samowystarczalności'), 'wartość z encji trafia na kartę');
+
 console.log('\n— język: pl / en / auto —');
 const langCfg = (language) => ({
   type: 'custom:energy-flow-card',
@@ -703,6 +734,37 @@ const addDev = [...ed.shadowRoot.querySelectorAll('button')].find((b) => b.textC
 ok(!!addDev, 'przycisk dodawania urządzenia');
 addDev.click();
 ok(emitted && emitted.groups[0].devices.length === 1, 'dodanie urządzenia emituje config-changed');
+
+// pola tekstowe muszą realnie istnieć — ha-textfield bywa niezarejestrowany
+const inputs = [...ed.shadowRoot.querySelectorAll('input.txt')];
+ok(inputs.length > 0, `edytor renderuje własne pola tekstowe: ${inputs.length}`);
+ok(
+  inputs.every((i) => i.closest('.field') && i.closest('.field').querySelector('.lbl')),
+  'każde pole ma widoczną etykietę'
+);
+const nameInput = inputs.find((i) => i.closest('.field').querySelector('.lbl').textContent === 'Nazwa grupy');
+ok(!!nameInput, 'pole nazwy grupy jest obecne');
+nameInput.value = 'Kuchnia';
+nameInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+ok(emitted.groups[0].name === 'Kuchnia', 'wpisanie nazwy trafia do konfiguracji');
+
+// wszystkie sekcje i opcje
+const heads = [...ed.shadowRoot.querySelectorAll('.sec-head')].map((h) => h.textContent);
+ok(
+  ['Wygląd i zachowanie', 'Układ węzłów', 'Fotowoltaika', 'Sieć energetyczna', 'Akumulator', 'Węzeł domu', 'Grupy odbiorników'].every(
+    (s) => heads.some((h) => h.includes(s))
+  ),
+  `wszystkie sekcje obecne: ${heads.length}`
+);
+const labels = [...ed.shadowRoot.querySelectorAll('.lbl')].map((l) => l.textContent);
+ok(labels.includes('Język'), 'wybór języka w edytorze');
+ok(labels.includes('Próg bezczynności (W)'), 'próg bezczynności w edytorze');
+
+// kanały urządzenia z GUI
+const addCh = [...ed.shadowRoot.querySelectorAll('button')].find((b) => b.textContent.includes('Dodaj kanał'));
+ok(!!addCh, 'przycisk dodawania kanału');
+addCh.click();
+ok(emitted.groups[0].devices[0].devices && emitted.groups[0].devices[0].devices.length >= 1, 'kanały dodawane z edytora');
 const before = JSON.stringify(emitted);
 ed.setConfig(emitted); // echo z HA
 ed._config.groups[0].devices[0].name = 'Pompa';

@@ -9,76 +9,96 @@ const ICONS = [
 ];
 
 const ICON_LABELS = {
-  plug: 'Gniazdko',
-  sun: 'Słońce',
-  panel: 'Panel PV',
-  house: 'Dom',
-  tower: 'Słup energetyczny',
-  battery: 'Akumulator',
-  climate: 'Klimatyzacja',
-  stove: 'Kuchnia',
-  washer: 'Pralka',
-  car: 'Samochód / EV',
-  bulb: 'Oświetlenie',
-  tv: 'Multimedia',
-  water: 'Woda',
-  server: 'Serwer / sieć',
-  fan: 'Wentylator'
+  plug: 'Gniazdko', sun: 'Słońce', panel: 'Panel PV', house: 'Dom',
+  tower: 'Słup energetyczny', battery: 'Akumulator', climate: 'Klimatyzacja',
+  stove: 'Kuchnia', washer: 'Pralka', car: 'Samochód / EV', bulb: 'Oświetlenie',
+  tv: 'Multimedia', water: 'Woda', server: 'Serwer / sieć', fan: 'Wentylator'
 };
 
 const LAYOUT_LABELS = {
-  strings: 'Falowniki',
-  solar: 'Fotowoltaika',
-  hub: 'Dom',
-  grid: 'Sieć',
-  batt: 'Akumulator',
-  consumers: 'Odbiorniki'
+  strings: 'Falowniki', solar: 'Fotowoltaika', hub: 'Dom',
+  grid: 'Sieć', batt: 'Akumulator', consumers: 'Odbiorniki'
 };
 
 const clone = (o) => JSON.parse(JSON.stringify(o === undefined ? null : o));
 
-const EDITOR_STYLES = `
+const STYLES = `
 :host { display:block; }
-.ed { display:flex;flex-direction:column;gap:12px;padding:4px 0 12px; }
-.sec { border:1px solid var(--divider-color,#3335);border-radius:10px;overflow:hidden;background:var(--card-background-color,transparent); }
-.sec > .sec-head {
-  display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;
-  font-weight:600;font-size:14px;background:rgba(127,127,127,.06);
+.ed { display:flex;flex-direction:column;gap:14px;padding:4px 0 16px;
+  font-family:var(--ha-font-family-body,var(--primary-font-family,Roboto,system-ui,sans-serif));
+  color:var(--primary-text-color); }
+
+/* --- sekcje --- */
+.sec { border:1px solid var(--divider-color,#3335);border-radius:12px;overflow:hidden; }
+.sec-head {
+  display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;user-select:none;
+  font-weight:600;font-size:15px;background:rgba(127,127,127,.07);
 }
-.sec > .sec-head .chev { margin-left:auto;opacity:.6;font-size:12px; }
-.sec > .sec-body { padding:12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--divider-color,#3335); }
-.sec.closed > .sec-body { display:none; }
-.row { display:flex;gap:10px;flex-wrap:wrap;align-items:center; }
-.row > * { flex:1 1 220px;min-width:0; }
-.row.tight > * { flex:0 0 auto; }
-ha-textfield, ha-entity-picker { width:100%;display:block; }
+.sec-head:hover { background:rgba(127,127,127,.12); }
+.sec-head .chev { margin-left:auto;opacity:.55;font-size:13px;transition:transform .15s; }
+.sec.closed .sec-head .chev { transform:rotate(-90deg); }
+.sec-head .count {
+  font-size:11px;font-weight:600;opacity:.6;padding:2px 8px;border-radius:999px;
+  border:1px solid var(--divider-color,#3335);
+}
+.sec-body { padding:16px 14px;display:flex;flex-direction:column;gap:16px; }
+.sec.closed .sec-body { display:none; }
+
+/* --- pola --- */
+.field { display:flex;flex-direction:column;gap:6px;min-width:0; }
+.field > .lbl { font-size:12px;font-weight:500;opacity:.72;letter-spacing:.01em; }
+.grid2 { display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px; }
+.grid3 { display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px; }
+
+input.txt, select.sel {
+  width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;font-size:14px;
+  border:1px solid var(--divider-color,#4446);
+  background:var(--secondary-background-color,rgba(127,127,127,.08));
+  color:var(--primary-text-color,inherit);
+  font-family:inherit;
+}
+input.txt:focus, select.sel:focus { outline:none;border-color:var(--primary-color,#03a9f4); }
+input.txt::placeholder { opacity:.45; }
+input.txt:disabled { opacity:.6; }
+ha-entity-picker { width:100%;display:block; }
+
+/* --- przełączniki --- */
+.switches { display:flex;flex-wrap:wrap;gap:10px 20px; }
+label.sw { display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer; }
+
+/* --- karty pozycji --- */
 .item {
-  border:1px dashed var(--divider-color,#3335);border-radius:10px;padding:10px;
-  display:flex;flex-direction:column;gap:8px;
+  border:1px solid var(--divider-color,#3335);border-radius:10px;padding:12px;
+  display:flex;flex-direction:column;gap:12px;background:rgba(127,127,127,.035);
 }
-.item-head { display:flex;align-items:center;gap:8px; }
-.item-title { font-weight:600;font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.item-head { display:flex;align-items:center;gap:8px;min-height:30px; }
+.item-title {
+  font-weight:600;font-size:13px;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.item-title .sub { font-weight:400;opacity:.6;margin-left:6px;font-size:12px; }
+.kids { display:flex;flex-direction:column;gap:10px;padding-left:12px;border-left:2px solid var(--divider-color,#3335); }
+
+/* --- przyciski --- */
 .btn {
-  cursor:pointer;border:1px solid var(--divider-color,#3335);border-radius:8px;padding:6px 10px;
-  font-size:12px;font-weight:600;background:transparent;color:var(--primary-text-color,inherit);
+  cursor:pointer;border:1px solid var(--divider-color,#4446);border-radius:8px;padding:7px 12px;
+  font-size:13px;font-weight:500;background:transparent;color:var(--primary-text-color,inherit);
+  font-family:inherit;white-space:nowrap;
 }
 .btn:hover { border-color:var(--primary-color,#03a9f4);color:var(--primary-color,#03a9f4); }
+.btn.icon { padding:6px 9px;line-height:1; }
 .btn.danger:hover { border-color:var(--error-color,#db4437);color:var(--error-color,#db4437); }
-.hint { font-size:12px;opacity:.7;line-height:1.45; }
-label.sw { display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;flex:0 0 auto; }
-select.icon, select.plain {
-  width:100%;padding:9px 8px;border-radius:6px;border:1px solid var(--divider-color,#3335);
-  background:var(--card-background-color,#0000);color:var(--primary-text-color,inherit);font-size:14px;
-}
-.group-card { border:1px solid var(--divider-color,#3335);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:10px; }
-.devs { display:flex;flex-direction:column;gap:8px;padding-left:10px;border-left:2px solid var(--divider-color,#3335); }
+.btn.add { align-self:flex-start;border-style:dashed; }
+
+.hint { font-size:12px;opacity:.65;line-height:1.5; }
+.hint.warn { color:var(--warning-color,#ffa726);opacity:.9; }
 `;
 
 class EnergyFlowCardEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._open = { look: true, layout: false, solar: true, grid: true, batt: true, house: false, groups: true };
+    this._open = { look: true, layout: false, solar: false, grid: false, batt: false, house: false, groups: true };
     this._built = false;
     /* karta w podglądzie zgłasza tu nowe pozycje po przeciągnięciu węzła */
     this._onLayout = (ev) => {
@@ -128,39 +148,77 @@ class EnergyFlowCardEditor extends HTMLElement {
     const cfg = clone(this._config);
     this._emitted = JSON.stringify(cfg);
     this.dispatchEvent(
-      new CustomEvent('config-changed', {
-        detail: { config: cfg },
-        bubbles: true,
-        composed: true
-      })
+      new CustomEvent('config-changed', { detail: { config: cfg }, bubbles: true, composed: true })
     );
   }
 
-  /* ---------------------------------------------------------- kreatory */
+  /* ------------------------------------------------------- kreatory pól */
 
-  _textField(label, value, onInput, opts) {
-    const f = document.createElement('ha-textfield');
-    f.label = label;
-    f.value = value === undefined || value === null ? '' : String(value);
-    if (opts && opts.type) f.type = opts.type;
-    if (opts && opts.suffix) f.suffix = opts.suffix;
-    f.addEventListener('input', () => onInput(f.value));
+  _field(label, control) {
+    const f = document.createElement('div');
+    f.className = 'field';
+    if (label) {
+      const l = document.createElement('div');
+      l.className = 'lbl';
+      l.textContent = label;
+      f.appendChild(l);
+    }
+    f.appendChild(control);
     return f;
   }
 
-  _entityPicker(label, value, onChange, domains) {
+  /* własny input — ha-textfield bywa niezarejestrowany w kontekście edytora
+     i wtedy renderuje się jako pusty element, gubiąc całe pole */
+  _text(label, value, onInput, opts) {
+    const i = document.createElement('input');
+    i.className = 'txt';
+    i.type = (opts && opts.type) || 'text';
+    i.value = value === undefined || value === null ? '' : String(value);
+    if (opts && opts.placeholder) i.placeholder = opts.placeholder;
+    if (opts && opts.min !== undefined) i.min = opts.min;
+    i.addEventListener('input', () => onInput(i.value));
+    return this._field(label, i);
+  }
+
+  _select(label, value, options, onChange) {
+    const s = document.createElement('select');
+    s.className = 'sel';
+    options.forEach(([k, l]) => {
+      const o = document.createElement('option');
+      o.value = k;
+      o.textContent = l;
+      if (k === value) o.selected = true;
+      s.appendChild(o);
+    });
+    s.addEventListener('change', () => onChange(s.value));
+    return this._field(label, s);
+  }
+
+  _icon(label, value, onChange) {
+    return this._select(
+      label,
+      value || 'plug',
+      ICONS.map((k) => [k, ICON_LABELS[k] || k]),
+      onChange
+    );
+  }
+
+  _entity(label, value, onChange, domains) {
     /* listy encji edytuje się w YAML — picker obsługuje jedną encję i skasowałby resztę */
     if (Array.isArray(value)) {
-      const f = document.createElement('ha-textfield');
-      f.label = label + ' — lista ' + value.length + ' encji';
-      f.value = value.join(', ');
-      f.disabled = true;
-      f.helper = 'Edytuj w widoku YAML';
+      const i = document.createElement('input');
+      i.className = 'txt';
+      i.value = value.join(', ');
+      i.disabled = true;
+      const f = this._field(label + ' — lista ' + value.length + ' encji', i);
+      const h = document.createElement('div');
+      h.className = 'hint';
+      h.textContent = 'Listy encji edytuje się w widoku YAML.';
+      f.appendChild(h);
       return f;
     }
     const p = document.createElement('ha-entity-picker');
     p.hass = this._hass;
-    p.label = label;
     p.value = value || '';
     p.allowCustomEntity = true;
     p.includeDomains = domains || ['sensor', 'input_number', 'number'];
@@ -168,21 +226,7 @@ class EnergyFlowCardEditor extends HTMLElement {
       ev.stopPropagation();
       onChange(ev.detail.value || null);
     });
-    return p;
-  }
-
-  _iconSelect(value, onChange) {
-    const s = document.createElement('select');
-    s.className = 'icon';
-    ICONS.forEach((k) => {
-      const o = document.createElement('option');
-      o.value = k;
-      o.textContent = ICON_LABELS[k] || k;
-      if (k === value) o.selected = true;
-      s.appendChild(o);
-    });
-    s.addEventListener('change', () => onChange(s.value));
-    return s;
+    return this._field(label, p);
   }
 
   _switch(label, checked, onChange) {
@@ -196,44 +240,70 @@ class EnergyFlowCardEditor extends HTMLElement {
     return wrap;
   }
 
-  _button(text, onClick, danger) {
+  _btn(text, onClick, cls) {
     const b = document.createElement('button');
-    b.className = 'btn' + (danger ? ' danger' : '');
+    b.className = 'btn' + (cls ? ' ' + cls : '');
     b.textContent = text;
     b.addEventListener('click', onClick);
     return b;
   }
 
-  _row(...children) {
+  _group(...children) {
     const r = document.createElement('div');
-    r.className = 'row';
+    r.className = 'grid2';
     children.filter(Boolean).forEach((c) => r.appendChild(c));
     return r;
   }
 
-  _section(key, title, buildBody) {
+  _cols3(...children) {
+    const r = document.createElement('div');
+    r.className = 'grid3';
+    children.filter(Boolean).forEach((c) => r.appendChild(c));
+    return r;
+  }
+
+  _hint(text, warn) {
+    const d = document.createElement('div');
+    d.className = 'hint' + (warn ? ' warn' : '');
+    d.textContent = text;
+    return d;
+  }
+
+  _section(key, title, count, build) {
     const sec = document.createElement('div');
     sec.className = 'sec' + (this._open[key] ? '' : ' closed');
     const head = document.createElement('div');
     head.className = 'sec-head';
-    head.innerHTML = `<span>${title}</span><span class="chev">${this._open[key] ? '▾' : '▸'}</span>`;
+    head.innerHTML =
+      `<span>${title}</span>` +
+      (count ? `<span class="count">${count}</span>` : '') +
+      '<span class="chev">▾</span>';
     head.addEventListener('click', () => {
       this._open[key] = !this._open[key];
       this._render();
     });
     const body = document.createElement('div');
     body.className = 'sec-body';
-    buildBody(body);
+    build(body);
     sec.appendChild(head);
     sec.appendChild(body);
     return sec;
   }
 
-  _hint(text) {
-    const d = document.createElement('div');
-    d.className = 'hint';
-    d.textContent = text;
-    return d;
+  _itemCard(title, sub, actions) {
+    const it = document.createElement('div');
+    it.className = 'item';
+    const head = document.createElement('div');
+    head.className = 'item-head';
+    const t = document.createElement('div');
+    t.className = 'item-title';
+    t.innerHTML = `<span class="name"></span>${sub ? `<span class="sub">${sub}</span>` : ''}`;
+    t.querySelector('.name').textContent = title;
+    head.appendChild(t);
+    (actions || []).forEach((a) => head.appendChild(a));
+    it.appendChild(head);
+    it._title = t.querySelector('.name');
+    return it;
   }
 
   /* -------------------------------------------------------------- render */
@@ -241,555 +311,18 @@ class EnergyFlowCardEditor extends HTMLElement {
   _render() {
     if (!this.shadowRoot) return;
     const c = this._config || {};
-    this.shadowRoot.innerHTML = `<style>${EDITOR_STYLES}</style>`;
+    this.shadowRoot.innerHTML = `<style>${STYLES}</style>`;
     const ed = document.createElement('div');
     ed.className = 'ed';
     this.shadowRoot.appendChild(ed);
 
-    /* ------------------------------------------------------- wygląd */
-    ed.appendChild(
-      this._section('look', 'Wygląd i zachowanie', (b) => {
-        b.appendChild(
-          this._row(
-            this._textField('Tytuł', c.title !== undefined ? c.title : 'Przepływ energii', (v) => {
-              this._config.title = v;
-              this._emit();
-            }),
-            this._textField('Nadtytuł', c.kicker, (v) => {
-              this._config.kicker = v;
-              this._emit();
-            })
-          )
-        );
-        b.appendChild(
-          this._textField('Podtytuł', c.subtitle, (v) => {
-            this._config.subtitle = v;
-            this._emit();
-          })
-        );
-
-        const theme = document.createElement('select');
-        theme.className = 'plain';
-        [
-          ['auto', 'Motyw: automatyczny (wg HA)'],
-          ['dark', 'Motyw: ciemny'],
-          ['light', 'Motyw: jasny']
-        ].forEach(([k, l]) => {
-          const o = document.createElement('option');
-          o.value = k;
-          o.textContent = l;
-          if ((c.theme_mode || 'auto') === k) o.selected = true;
-          theme.appendChild(o);
-        });
-        theme.addEventListener('change', () => {
-          this._config.theme_mode = theme.value;
-          this._emit();
-        });
-
-        const lang = document.createElement('select');
-        lang.className = 'plain';
-        [
-          ['auto', 'Język: automatyczny (wg HA)'],
-          ['pl', 'Język: polski'],
-          ['en', 'Język: angielski']
-        ].forEach(([k, l]) => {
-          const o = document.createElement('option');
-          o.value = k;
-          o.textContent = l;
-          if ((c.language || 'auto') === k) o.selected = true;
-          lang.appendChild(o);
-        });
-        lang.addEventListener('change', () => {
-          this._config.language = lang.value;
-          this._emit();
-        });
-        b.appendChild(lang);
-
-        b.appendChild(
-          this._row(
-            theme,
-            this._textField(
-              'Próg bezczynności (W)',
-              c.idle_threshold !== undefined ? c.idle_threshold : 15,
-              (v) => {
-                this._config.idle_threshold = Number(v) || 15;
-                this._emit();
-              },
-              { type: 'number' }
-            )
-          )
-        );
-
-        const flags = document.createElement('div');
-        flags.className = 'row tight';
-        flags.appendChild(
-          this._switch('Animacja przepływu', c.animate !== false, (v) => {
-            this._config.animate = v;
-            this._emit();
-          })
-        );
-        flags.appendChild(
-          this._switch('Legenda', c.legend !== false, (v) => {
-            this._config.legend = v;
-            this._emit();
-          })
-        );
-        flags.appendChild(
-          this._switch('Okno historii po kliknięciu', c.history !== false, (v) => {
-            this._config.history = v;
-            this._emit();
-          })
-        );
-        b.appendChild(flags);
-        b.appendChild(
-          this._hint(
-            'Wyłączenie okna historii sprawia, że kliknięcie węzła otwiera standardowe okno „więcej informacji” Home Assistanta.'
-          )
-        );
-      })
-    );
-
-    /* --------------------------------------------------------- układ */
-    ed.appendChild(
-      this._section('layout', 'Układ węzłów', (b) => {
-        const L = c.layout || {};
-        const free = L.mode === 'free';
-        const upd = (patch) => {
-          this._config.layout = Object.assign({}, this._config.layout, patch);
-          this._emit();
-        };
-
-        const flags = document.createElement('div');
-        flags.className = 'row tight';
-        flags.appendChild(
-          this._switch('Swobodne pozycjonowanie', free, (v) => {
-            upd({ mode: v ? 'free' : 'auto' });
-            this._render();
-          })
-        );
-        if (free) {
-          flags.appendChild(
-            this._switch('Tryb przeciągania', !!L.edit, (v) => {
-              upd({ edit: v });
-            })
-          );
-        }
-        b.appendChild(flags);
-
-        if (!free) {
-          b.appendChild(
-            this._hint(
-              'Układ automatyczny: węzły rozkładają się same, a szyna odbiorników przelewa się na kolumny. ' +
-                'Włącz swobodne pozycjonowanie, aby ustawić węzły po swojemu.'
-            )
-          );
-          return;
-        }
-
-        b.appendChild(
-          this._row(
-            this._textField('Wysokość karty (px)', L.height || 700, (v) => upd({ height: Number(v) || 700 }), {
-              type: 'number'
-            }),
-            this._textField(
-              'Szerokość szyny odbiorników (%)',
-              L.rail_width || 46,
-              (v) => upd({ rail_width: Number(v) || 46 }),
-              { type: 'number' }
-            )
-          )
-        );
-
-        const nodes = L.nodes || {};
-        const keys = Object.keys(nodes);
-        if (keys.length) {
-          const list = document.createElement('div');
-          list.className = 'hint';
-          list.textContent =
-            'Zapisane pozycje: ' +
-            keys.map((k) => `${LAYOUT_LABELS[k] || k} (${nodes[k].x}%, ${nodes[k].y}%)`).join(' · ');
-          b.appendChild(list);
-        }
-
-        b.appendChild(
-          this._button('Przywróć układ automatyczny', () => {
-            upd({ mode: 'auto', edit: false, nodes: {} });
-            this._render();
-          })
-        );
-
-        b.appendChild(
-          this._hint(
-            'Włącz „Tryb przeciągania" i przeciągnij węzły w podglądzie obok — pozycje zapiszą się tutaj automatycznie, ' +
-              'a linie przeliczą się w trakcie ruchu. Wyłącz tryb przeciągania, gdy skończysz, żeby kliknięcie węzła znów ' +
-              'otwierało historię. Poniżej 720 px karta i tak wraca do układu pionowego.'
-          )
-        );
-      })
-    );
-
-    /* -------------------------------------------------- fotowoltaika */
-    ed.appendChild(
-      this._section('solar', 'Fotowoltaika', (b) => {
-        const s = c.solar || {};
-        b.appendChild(
-          this._row(
-            this._textField('Nazwa węzła', s.name || 'Fotowoltaika łącznie', (v) => {
-              this._config.solar = Object.assign({}, this._config.solar, { name: v });
-              this._emit();
-            }),
-            this._entityPicker('Moc łączna (opcjonalnie)', s.power, (v) => {
-              this._config.solar = Object.assign({}, this._config.solar, { power: v });
-              this._emit();
-            })
-          )
-        );
-        const usolar = (patch) => {
-          this._config.solar = Object.assign({}, this._config.solar, patch);
-          this._emit();
-        };
-        b.appendChild(
-          this._row(
-            this._entityPicker('Energia dzisiaj — łącznie (opcjonalnie)', s.energy, (v) => usolar({ energy: v })),
-            this._textField('Moc znamionowa falownika (W)', s.max_power, (v) => usolar({ max_power: Number(v) || 0 }), {
-              type: 'number'
-            })
-          )
-        );
-        b.appendChild(
-          this._row(
-            this._entityPicker('Napięcie AC', s.voltage, (v) => usolar({ voltage: v })),
-            this._entityPicker('Prąd AC', s.current, (v) => usolar({ current: v }))
-          )
-        );
-        b.appendChild(
-          this._row(
-            this._entityPicker('Częstotliwość', s.frequency, (v) => usolar({ frequency: v })),
-            this._entityPicker('Stan pracy falownika', s.status, (v) => usolar({ status: v }), [
-              'sensor',
-              'binary_sensor'
-            ])
-          )
-        );
-        b.appendChild(
-          this._hint(
-            'Moc znamionowa daje procent wykorzystania przy sumie (np. 5,97 kW z 8 kW = 75%). ' +
-              'Bez niej karta sumuje moce szczytowe stringów.'
-          )
-        );
-        b.appendChild(
-          this._hint(
-            'Bez encji łącznych karta sumuje wartości ze stringów falowników poniżej. Sekcja fotowoltaiki pokazuje się tylko, gdy jest co najmniej jeden string.'
-          )
-        );
-
-        (s.strings || []).forEach((str, i) => {
-          const it = document.createElement('div');
-          it.className = 'item';
-          const head = document.createElement('div');
-          head.className = 'item-head';
-          const t = document.createElement('div');
-          t.className = 'item-title';
-          t.textContent = str.name || 'String ' + (i + 1);
-          head.appendChild(t);
-          head.appendChild(
-            this._button(
-              'Usuń',
-              () => {
-                this._config.solar.strings.splice(i, 1);
-                this._emit();
-                this._render();
-              },
-              true
-            )
-          );
-          it.appendChild(head);
-          it.appendChild(
-            this._row(
-              this._textField('Nazwa', str.name, (v) => {
-                str.name = v;
-                t.textContent = v || 'String ' + (i + 1);
-                this._emit();
-              }),
-              this._iconSelect(str.icon || 'panel', (v) => {
-                str.icon = v;
-                this._emit();
-              })
-            )
-          );
-          it.appendChild(
-            this._row(
-              this._entityPicker('Moc', str.power, (v) => {
-                str.power = v;
-                this._emit();
-              }),
-              this._entityPicker('Energia dzisiaj', str.energy, (v) => {
-                str.energy = v;
-                this._emit();
-              })
-            )
-          );
-          it.appendChild(
-            this._row(
-              this._entityPicker('Napięcie DC', str.voltage, (v) => {
-                str.voltage = v;
-                this._emit();
-              }),
-              this._entityPicker('Prąd DC', str.current, (v) => {
-                str.current = v;
-                this._emit();
-              }),
-              this._textField('Moc szczytowa (W)', str.max_power, (v) => {
-                str.max_power = Number(v) || 0;
-                this._emit();
-              }, { type: 'number' })
-            )
-          );
-          b.appendChild(it);
-        });
-
-        b.appendChild(
-          this._button('+ Dodaj string falownika', () => {
-            const solar = this._config.solar || {};
-            solar.name = solar.name || 'Fotowoltaika łącznie';
-            solar.strings = solar.strings || [];
-            solar.strings.push({ name: 'Falownik ' + (solar.strings.length + 1), icon: 'panel', power: null, energy: null });
-            this._config.solar = solar;
-            this._emit();
-            this._render();
-          })
-        );
-      })
-    );
-
-    /* --------------------------------------------------------- sieć */
-    ed.appendChild(
-      this._section('grid', 'Sieć energetyczna', (b) => {
-        const g = c.grid || {};
-        const upd = (patch) => {
-          this._config.grid = Object.assign({}, this._config.grid, patch);
-          this._emit();
-        };
-        b.appendChild(
-          this._row(
-            this._textField('Nazwa', g.name || 'Sieć', (v) => upd({ name: v })),
-            this._entityPicker('Moc (dodatnia = pobór)', g.power, (v) => upd({ power: v }))
-          )
-        );
-        b.appendChild(
-          this._row(
-            this._entityPicker('Moc poboru (alternatywnie)', g.power_import, (v) => upd({ power_import: v })),
-            this._entityPicker('Moc oddawania (alternatywnie)', g.power_export, (v) => upd({ power_export: v }))
-          )
-        );
-        b.appendChild(
-          this._row(
-            this._entityPicker('Energia pobrana dzisiaj', g.energy_import, (v) => upd({ energy_import: v })),
-            this._entityPicker('Energia oddana dzisiaj', g.energy_export, (v) => upd({ energy_export: v }))
-          )
-        );
-        b.appendChild(this._switch('Odwróć znak mocy', !!g.invert, (v) => upd({ invert: v })));
-        b.appendChild(
-          this._hint(
-            'Użyj jednej encji mocy ze znakiem (+ pobór / − oddanie) albo pary osobnych encji poboru i oddawania.'
-          )
-        );
-      })
-    );
-
-    /* --------------------------------------------------- akumulator */
-    ed.appendChild(
-      this._section('batt', 'Akumulator', (b) => {
-        const t = c.battery || {};
-        const upd = (patch) => {
-          this._config.battery = Object.assign({}, this._config.battery, patch);
-          this._emit();
-        };
-        b.appendChild(
-          this._row(
-            this._textField('Nazwa', t.name || 'Akumulator', (v) => upd({ name: v })),
-            this._entityPicker('Moc (dodatnia = ładowanie)', t.power, (v) => upd({ power: v }))
-          )
-        );
-        b.appendChild(
-          this._row(
-            this._entityPicker('Stan naładowania (%)', t.soc, (v) => upd({ soc: v })),
-            this._entityPicker('Energia dzisiaj', t.energy, (v) => upd({ energy: v }))
-          )
-        );
-        b.appendChild(this._switch('Odwróć znak mocy', !!t.invert, (v) => upd({ invert: v })));
-      })
-    );
-
-    /* --------------------------------------------------------- dom */
-    ed.appendChild(
-      this._section('house', 'Węzeł domu', (b) => {
-        const h = c.house || {};
-        const upd = (patch) => {
-          this._config.house = Object.assign({}, this._config.house, patch);
-          this._emit();
-        };
-        b.appendChild(
-          this._row(
-            this._textField('Nazwa', h.name || 'Dom', (v) => upd({ name: v })),
-            this._entityPicker('Moc całkowita (opcjonalnie)', h.power, (v) => upd({ power: v }))
-          )
-        );
-        b.appendChild(
-          this._entityPicker('Energia dzisiaj (opcjonalnie)', h.energy, (v) => upd({ energy: v }))
-        );
-        b.appendChild(
-          this._hint('Bez tych encji karta sumuje moc i energię wszystkich urządzeń z grup odbiorników.')
-        );
-      })
-    );
-
-    /* ---------------------------------------------------- odbiorniki */
-    ed.appendChild(
-      this._section('groups', 'Grupy odbiorników', (b) => {
-        const groups = c.groups || [];
-        groups.forEach((g, gi) => {
-          const card = document.createElement('div');
-          card.className = 'group-card';
-
-          const head = document.createElement('div');
-          head.className = 'item-head';
-          const t = document.createElement('div');
-          t.className = 'item-title';
-          t.textContent = (g.name || 'Grupa ' + (gi + 1)) + ' · ' + (g.devices || []).length + ' urz.';
-          head.appendChild(t);
-          head.appendChild(
-            this._button('▲', () => {
-              if (gi === 0) return;
-              const arr = this._config.groups;
-              [arr[gi - 1], arr[gi]] = [arr[gi], arr[gi - 1]];
-              this._emit();
-              this._render();
-            })
-          );
-          head.appendChild(
-            this._button('▼', () => {
-              const arr = this._config.groups;
-              if (gi >= arr.length - 1) return;
-              [arr[gi + 1], arr[gi]] = [arr[gi], arr[gi + 1]];
-              this._emit();
-              this._render();
-            })
-          );
-          head.appendChild(
-            this._button(
-              'Usuń grupę',
-              () => {
-                this._config.groups.splice(gi, 1);
-                this._emit();
-                this._render();
-              },
-              true
-            )
-          );
-          card.appendChild(head);
-
-          card.appendChild(
-            this._row(
-              this._textField('Nazwa grupy', g.name, (v) => {
-                g.name = v;
-                this._emit();
-              }),
-              this._iconSelect(g.icon || 'plug', (v) => {
-                g.icon = v;
-                this._emit();
-              }),
-              this._switch('Rozwinięta domyślnie', !!g.expanded, (v) => {
-                g.expanded = v;
-                this._emit();
-              })
-            )
-          );
-
-          const devs = document.createElement('div');
-          devs.className = 'devs';
-          (g.devices || []).forEach((d, di) => {
-            const it = document.createElement('div');
-            it.className = 'item';
-            const dh = document.createElement('div');
-            dh.className = 'item-head';
-            const dt = document.createElement('div');
-            dt.className = 'item-title';
-            dt.textContent = d.name || 'Urządzenie ' + (di + 1);
-            dh.appendChild(dt);
-            dh.appendChild(
-              this._button(
-                'Usuń',
-                () => {
-                  g.devices.splice(di, 1);
-                  this._emit();
-                  this._render();
-                },
-                true
-              )
-            );
-            it.appendChild(dh);
-            it.appendChild(
-              this._row(
-                this._textField('Nazwa', d.name, (v) => {
-                  d.name = v;
-                  dt.textContent = v || 'Urządzenie ' + (di + 1);
-                  this._emit();
-                }),
-                this._iconSelect(d.icon || 'plug', (v) => {
-                  d.icon = v;
-                  this._emit();
-                })
-              )
-            );
-            it.appendChild(
-              this._row(
-                this._entityPicker('Moc', d.power, (v) => {
-                  d.power = v;
-                  this._emit();
-                }),
-                this._entityPicker('Energia dzisiaj', d.energy, (v) => {
-                  d.energy = v;
-                  this._emit();
-                })
-              )
-            );
-            devs.appendChild(it);
-          });
-          card.appendChild(devs);
-
-          card.appendChild(
-            this._button('+ Dodaj urządzenie', () => {
-              g.devices = g.devices || [];
-              g.devices.push({ name: 'Urządzenie ' + (g.devices.length + 1), icon: 'plug', power: null, energy: null });
-              this._emit();
-              this._render();
-            })
-          );
-
-          b.appendChild(card);
-        });
-
-        b.appendChild(
-          this._button('+ Dodaj grupę', () => {
-            this._config.groups = this._config.groups || [];
-            this._config.groups.push({
-              name: 'Grupa ' + (this._config.groups.length + 1),
-              icon: 'plug',
-              devices: []
-            });
-            this._emit();
-            this._render();
-          })
-        );
-
-        b.appendChild(
-          this._hint(
-            'Grupy są jedynymi połączeniami węzła domu — dodanie urządzenia pogrubia istniejącą linię zamiast rysować nową.'
-          )
-        );
-      })
-    );
+    ed.appendChild(this._secLook(c));
+    ed.appendChild(this._secLayout(c));
+    ed.appendChild(this._secSolar(c));
+    ed.appendChild(this._secGrid(c));
+    ed.appendChild(this._secBattery(c));
+    ed.appendChild(this._secHouse(c));
+    ed.appendChild(this._secGroups(c));
 
     this._built = true;
     if (this._hass) {
@@ -797,6 +330,537 @@ class EnergyFlowCardEditor extends HTMLElement {
         p.hass = this._hass;
       });
     }
+  }
+
+  /* --------------------------------------------------- wygląd */
+
+  _secLook(c) {
+    return this._section('look', 'Wygląd i zachowanie', '', (b) => {
+      b.appendChild(
+        this._group(
+          this._text('Tytuł', c.title !== undefined ? c.title : 'Przepływ energii', (v) => {
+            this._config.title = v;
+            this._emit();
+          }),
+          this._text('Nadtytuł', c.kicker, (v) => {
+            this._config.kicker = v;
+            this._emit();
+          })
+        )
+      );
+      b.appendChild(
+        this._text('Podtytuł', c.subtitle, (v) => {
+          this._config.subtitle = v;
+          this._emit();
+        }, { placeholder: 'np. Fronius Symo · Smart Meter' })
+      );
+      b.appendChild(
+        this._cols3(
+          this._select(
+            'Motyw',
+            c.theme_mode || 'auto',
+            [['auto', 'Automatyczny (wg HA)'], ['dark', 'Ciemny'], ['light', 'Jasny']],
+            (v) => {
+              this._config.theme_mode = v;
+              this._emit();
+            }
+          ),
+          this._select(
+            'Język',
+            c.language || 'auto',
+            [['auto', 'Automatyczny (wg HA)'], ['pl', 'Polski'], ['en', 'Angielski']],
+            (v) => {
+              this._config.language = v;
+              this._emit();
+            }
+          ),
+          this._text(
+            'Próg bezczynności (W)',
+            c.idle_threshold !== undefined ? c.idle_threshold : 15,
+            (v) => {
+              this._config.idle_threshold = Number(v) || 15;
+              this._emit();
+            },
+            { type: 'number', min: 0 }
+          )
+        )
+      );
+
+      const sw = document.createElement('div');
+      sw.className = 'switches';
+      sw.appendChild(
+        this._switch('Animacja przepływu', c.animate !== false, (v) => {
+          this._config.animate = v;
+          this._emit();
+        })
+      );
+      sw.appendChild(
+        this._switch('Legenda', c.legend !== false, (v) => {
+          this._config.legend = v;
+          this._emit();
+        })
+      );
+      sw.appendChild(
+        this._switch('Okno historii po kliknięciu', c.history !== false, (v) => {
+          this._config.history = v;
+          this._emit();
+        })
+      );
+      sw.appendChild(
+        this._switch('Przycisk układu na karcie', c.layout_button !== false, (v) => {
+          this._config.layout_button = v;
+          this._emit();
+        })
+      );
+      b.appendChild(sw);
+      b.appendChild(
+        this._hint(
+          'Bez okna historii kliknięcie węzła otwiera standardowe okno „więcej informacji" Home Assistanta.'
+        )
+      );
+    });
+  }
+
+  /* --------------------------------------------------- układ */
+
+  _secLayout(c) {
+    const L = c.layout || {};
+    const free = L.mode === 'free';
+    const nodes = L.nodes || {};
+    const count = Object.keys(nodes).length;
+    return this._section('layout', 'Układ węzłów', free ? 'swobodny' : 'automatyczny', (b) => {
+      const upd = (patch) => {
+        this._config.layout = Object.assign({}, this._config.layout, patch);
+        this._emit();
+      };
+      b.appendChild(
+        this._hint(
+          'Najprościej: kliknij przycisk „⠿ Układ" w rogu karty i przeciągnij węzły. ' +
+            'Układ zapisze się w tej przeglądarce, a przyciskiem „Kopiuj YAML" przeniesiesz go tutaj na stałe.'
+        )
+      );
+      const sw = document.createElement('div');
+      sw.className = 'switches';
+      sw.appendChild(
+        this._switch('Swobodne pozycjonowanie', free, (v) => {
+          upd({ mode: v ? 'free' : 'auto' });
+          this._render();
+        })
+      );
+      b.appendChild(sw);
+
+      if (!free) return;
+
+      b.appendChild(
+        this._group(
+          this._text('Wysokość karty (px)', L.height || 700, (v) => upd({ height: Number(v) || 700 }), {
+            type: 'number',
+            min: 200
+          }),
+          this._text(
+            'Szerokość szyny odbiorników (%)',
+            L.rail_width || 46,
+            (v) => upd({ rail_width: Number(v) || 46 }),
+            { type: 'number', min: 10 }
+          )
+        )
+      );
+      if (count) {
+        b.appendChild(
+          this._hint(
+            'Zapisane pozycje: ' +
+              Object.keys(nodes)
+                .map((k) => `${LAYOUT_LABELS[k] || k} ${nodes[k].x}%/${nodes[k].y}%`)
+                .join(' · ')
+          )
+        );
+      }
+      b.appendChild(
+        this._btn(
+          'Przywróć układ automatyczny',
+          () => {
+            upd({ mode: 'auto', edit: false, nodes: {} });
+            this._render();
+          },
+          'danger'
+        )
+      );
+    });
+  }
+
+  /* --------------------------------------------------- fotowoltaika */
+
+  _secSolar(c) {
+    const s = c.solar || {};
+    const strings = s.strings || [];
+    return this._section('solar', 'Fotowoltaika', strings.length ? strings.length + ' str.' : '', (b) => {
+      const upd = (patch) => {
+        this._config.solar = Object.assign({ name: 'Fotowoltaika łącznie' }, this._config.solar, patch);
+        this._emit();
+      };
+      b.appendChild(
+        this._group(
+          this._text('Nazwa węzła', s.name, (v) => upd({ name: v }), { placeholder: 'Fotowoltaika łącznie' }),
+          this._text('Moc znamionowa falownika (W)', s.max_power, (v) => upd({ max_power: Number(v) || 0 }), {
+            type: 'number',
+            min: 0,
+            placeholder: 'np. 8000'
+          })
+        )
+      );
+      b.appendChild(
+        this._group(
+          this._entity('Moc łączna (opcjonalnie)', s.power, (v) => upd({ power: v })),
+          this._entity('Energia dzisiaj — łącznie (opcjonalnie)', s.energy, (v) => upd({ energy: v }))
+        )
+      );
+      b.appendChild(
+        this._hint(
+          'Bez encji łącznych karta sumuje stringi poniżej. Moc znamionowa daje procent wykorzystania ' +
+            'przy sumie (np. 5,97 kW z 8 kW = 75%).'
+        )
+      );
+
+      b.appendChild(this._hint('Strona AC falownika — pokazywana pod sumą:'));
+      b.appendChild(
+        this._cols3(
+          this._entity('Napięcie AC', s.voltage, (v) => upd({ voltage: v })),
+          this._entity('Prąd AC', s.current, (v) => upd({ current: v })),
+          this._entity('Częstotliwość', s.frequency, (v) => upd({ frequency: v }))
+        )
+      );
+      b.appendChild(
+        this._entity('Stan pracy falownika', s.status, (v) => upd({ status: v }), ['sensor', 'binary_sensor'])
+      );
+
+      strings.forEach((str, i) => {
+        const card = this._itemCard(str.name || 'String ' + (i + 1), '', [
+          this._btn('Usuń', () => {
+            this._config.solar.strings.splice(i, 1);
+            this._emit();
+            this._render();
+          }, 'danger')
+        ]);
+        card.appendChild(
+          this._group(
+            this._text('Nazwa', str.name, (v) => {
+              str.name = v;
+              card._title.textContent = v || 'String ' + (i + 1);
+              this._emit();
+            }),
+            this._icon('Ikona', str.icon || 'panel', (v) => {
+              str.icon = v;
+              this._emit();
+            })
+          )
+        );
+        card.appendChild(
+          this._group(
+            this._entity('Moc', str.power, (v) => {
+              str.power = v;
+              this._emit();
+            }),
+            this._entity('Energia dzisiaj', str.energy, (v) => {
+              str.energy = v;
+              this._emit();
+            })
+          )
+        );
+        card.appendChild(
+          this._cols3(
+            this._entity('Napięcie DC', str.voltage, (v) => {
+              str.voltage = v;
+              this._emit();
+            }),
+            this._entity('Prąd DC', str.current, (v) => {
+              str.current = v;
+              this._emit();
+            }),
+            this._text('Moc szczytowa (W)', str.max_power, (v) => {
+              str.max_power = Number(v) || 0;
+              this._emit();
+            }, { type: 'number', min: 0 })
+          )
+        );
+        b.appendChild(card);
+      });
+
+      b.appendChild(
+        this._btn('+ Dodaj string falownika', () => {
+          const solar = this._config.solar || {};
+          solar.strings = solar.strings || [];
+          solar.strings.push({ name: 'Falownik ' + (solar.strings.length + 1), icon: 'panel' });
+          this._config.solar = solar;
+          this._emit();
+          this._render();
+        }, 'add')
+      );
+    });
+  }
+
+  /* --------------------------------------------------- sieć */
+
+  _secGrid(c) {
+    const g = c.grid || {};
+    return this._section('grid', 'Sieć energetyczna', '', (b) => {
+      const upd = (patch) => {
+        this._config.grid = Object.assign({}, this._config.grid, patch);
+        this._emit();
+      };
+      b.appendChild(this._text('Nazwa', g.name, (v) => upd({ name: v }), { placeholder: 'Sieć' }));
+      b.appendChild(this._entity('Moc ze znakiem (+ pobór / − oddanie)', g.power, (v) => upd({ power: v })));
+      b.appendChild(this._hint('albo dwie osobne encje kierunkowe — pewniejsze, bo nie da się pomylić znaku:'));
+      b.appendChild(
+        this._group(
+          this._entity('Moc poboru', g.power_import, (v) => upd({ power_import: v })),
+          this._entity('Moc oddawania', g.power_export, (v) => upd({ power_export: v }))
+        )
+      );
+      b.appendChild(
+        this._group(
+          this._entity('Energia pobrana dzisiaj', g.energy_import, (v) => upd({ energy_import: v })),
+          this._entity('Energia oddana dzisiaj', g.energy_export, (v) => upd({ energy_export: v }))
+        )
+      );
+      const sw = document.createElement('div');
+      sw.className = 'switches';
+      sw.appendChild(this._switch('Odwróć znak mocy', !!g.invert, (v) => upd({ invert: v })));
+      b.appendChild(sw);
+      b.appendChild(
+        this._hint('Liczniki od uruchomienia instalacji pokażą MWh zamiast dziennych kWh — użyj utility_meter.')
+      );
+    });
+  }
+
+  /* --------------------------------------------------- akumulator */
+
+  _secBattery(c) {
+    const t = c.battery || {};
+    return this._section('batt', 'Akumulator', t.power ? '' : 'brak', (b) => {
+      const upd = (patch) => {
+        this._config.battery = Object.assign({}, this._config.battery, patch);
+        this._emit();
+      };
+      b.appendChild(this._text('Nazwa', t.name, (v) => upd({ name: v }), { placeholder: 'Akumulator' }));
+      b.appendChild(
+        this._group(
+          this._entity('Moc (+ ładowanie / − rozładowanie)', t.power, (v) => upd({ power: v })),
+          this._entity('Stan naładowania (%)', t.soc, (v) => upd({ soc: v }))
+        )
+      );
+      b.appendChild(this._entity('Energia dzisiaj', t.energy, (v) => upd({ energy: v })));
+      const sw = document.createElement('div');
+      sw.className = 'switches';
+      sw.appendChild(this._switch('Odwróć znak mocy', !!t.invert, (v) => upd({ invert: v })));
+      b.appendChild(sw);
+    });
+  }
+
+  /* --------------------------------------------------- dom */
+
+  _secHouse(c) {
+    const h = c.house || {};
+    const mode = h.power === 'auto' ? 'auto' : h.power ? 'entity' : 'sum';
+    return this._section('house', 'Węzeł domu', '', (b) => {
+      const upd = (patch) => {
+        this._config.house = Object.assign({}, this._config.house, patch);
+        this._emit();
+      };
+      b.appendChild(this._text('Nazwa', h.name, (v) => upd({ name: v }), { placeholder: 'Dom' }));
+      b.appendChild(
+        this._select(
+          'Skąd brać moc domu',
+          mode,
+          [
+            ['sum', 'Suma odbiorników z grup (domyślnie)'],
+            ['auto', 'Bilans: fotowoltaika + sieć − akumulator'],
+            ['entity', 'Osobna encja zużycia']
+          ],
+          (v) => {
+            if (v === 'sum') upd({ power: null });
+            else if (v === 'auto') upd({ power: 'auto' });
+            else upd({ power: '' });
+            this._render();
+          }
+        )
+      );
+      if (mode === 'entity') {
+        b.appendChild(this._entity('Encja mocy domu', h.power === 'auto' ? '' : h.power, (v) => upd({ power: v })));
+      }
+      b.appendChild(
+        this._group(
+          this._entity('Energia dzisiaj (opcjonalnie)', h.energy, (v) => upd({ energy: v })),
+          this._entity('Autonomia / samowystarczalność (%)', h.self_sufficiency, (v) =>
+            upd({ self_sufficiency: v })
+          )
+        )
+      );
+      b.appendChild(
+        this._hint(
+          'Bez encji autonomii karta liczy ją z bilansu: (moc domu − pobór z sieci) / moc domu. ' +
+            'Fronius wystawia gotową encję „Autonomia względna".'
+        )
+      );
+    });
+  }
+
+  /* --------------------------------------------------- grupy */
+
+  _deviceCard(dev, index, parentList, depth) {
+    const label = depth ? 'Kanał ' + (index + 1) : 'Urządzenie ' + (index + 1);
+    const kids = dev.devices || [];
+    const card = this._itemCard(dev.name || label, kids.length ? kids.length + ' kan.' : '', [
+      this._btn('Usuń', () => {
+        parentList.splice(index, 1);
+        this._emit();
+        this._render();
+      }, 'danger')
+    ]);
+
+    card.appendChild(
+      this._group(
+        this._text('Nazwa', dev.name, (v) => {
+          dev.name = v;
+          card._title.textContent = v || label;
+          this._emit();
+        }),
+        this._icon('Ikona', dev.icon || 'plug', (v) => {
+          dev.icon = v;
+          this._emit();
+        })
+      )
+    );
+
+    if (!kids.length) {
+      card.appendChild(
+        this._group(
+          this._entity('Moc', dev.power, (v) => {
+            dev.power = v;
+            this._emit();
+          }),
+          this._entity('Energia dzisiaj', dev.energy, (v) => {
+            dev.energy = v;
+            this._emit();
+          })
+        )
+      );
+    } else {
+      card.appendChild(this._hint('Moc i energia liczone jako suma kanałów poniżej.'));
+      const box = document.createElement('div');
+      box.className = 'kids';
+      kids.forEach((k, ki) => box.appendChild(this._deviceCard(k, ki, kids, depth + 1)));
+      card.appendChild(box);
+    }
+
+    if (depth < 1) {
+      card.appendChild(
+        this._btn('+ Dodaj kanał', () => {
+          dev.devices = dev.devices || [];
+          /* pierwszy kanał przejmuje encje rodzica, żeby nic nie zniknęło z karty */
+          if (!dev.devices.length && (dev.power || dev.energy)) {
+            dev.devices.push({ name: 'Kanał 1', icon: dev.icon || 'plug', power: dev.power, energy: dev.energy });
+            dev.power = null;
+            dev.energy = null;
+          }
+          dev.devices.push({ name: 'Kanał ' + (dev.devices.length + 1), icon: dev.icon || 'plug' });
+          this._emit();
+          this._render();
+        }, 'add')
+      );
+    }
+    return card;
+  }
+
+  _secGroups(c) {
+    const groups = c.groups || [];
+    const total = groups.reduce((t, g) => {
+      const count = (g.devices || []).reduce((n, d) => n + ((d.devices || []).length || 1), 0);
+      return t + count;
+    }, 0);
+    return this._section('groups', 'Grupy odbiorników', groups.length + ' gr. · ' + total + ' urz.', (b) => {
+      groups.forEach((g, gi) => {
+        const devices = g.devices || [];
+        const card = this._itemCard(g.name || 'Grupa ' + (gi + 1), devices.length + ' poz.', [
+          this._btn('▲', () => {
+            if (gi === 0) return;
+            const a = this._config.groups;
+            [a[gi - 1], a[gi]] = [a[gi], a[gi - 1]];
+            this._emit();
+            this._render();
+          }, 'icon'),
+          this._btn('▼', () => {
+            const a = this._config.groups;
+            if (gi >= a.length - 1) return;
+            [a[gi + 1], a[gi]] = [a[gi], a[gi + 1]];
+            this._emit();
+            this._render();
+          }, 'icon'),
+          this._btn('Usuń grupę', () => {
+            this._config.groups.splice(gi, 1);
+            this._emit();
+            this._render();
+          }, 'danger')
+        ]);
+
+        card.appendChild(
+          this._group(
+            this._text('Nazwa grupy', g.name, (v) => {
+              g.name = v;
+              card._title.textContent = v || 'Grupa ' + (gi + 1);
+              this._emit();
+            }),
+            this._icon('Ikona', g.icon || 'plug', (v) => {
+              g.icon = v;
+              this._emit();
+            })
+          )
+        );
+        const sw = document.createElement('div');
+        sw.className = 'switches';
+        sw.appendChild(
+          this._switch('Rozwinięta domyślnie', !!g.expanded, (v) => {
+            g.expanded = v;
+            this._emit();
+          })
+        );
+        card.appendChild(sw);
+
+        const box = document.createElement('div');
+        box.className = 'kids';
+        devices.forEach((d, di) => box.appendChild(this._deviceCard(d, di, devices, 0)));
+        card.appendChild(box);
+
+        card.appendChild(
+          this._btn('+ Dodaj urządzenie', () => {
+            g.devices = g.devices || [];
+            g.devices.push({ name: 'Urządzenie ' + (g.devices.length + 1), icon: 'plug' });
+            this._emit();
+            this._render();
+          }, 'add')
+        );
+
+        b.appendChild(card);
+      });
+
+      b.appendChild(
+        this._btn('+ Dodaj grupę', () => {
+          this._config.groups = this._config.groups || [];
+          this._config.groups.push({
+            name: 'Grupa ' + (this._config.groups.length + 1),
+            icon: 'plug',
+            devices: []
+          });
+          this._emit();
+          this._render();
+        }, 'add')
+      );
+      b.appendChild(
+        this._hint(
+          'Grupy są jedynymi połączeniami węzła domu — dodanie urządzenia pogrubia istniejącą linię ' +
+            'zamiast rysować nową. Urządzenie z kanałami pokazuje sumę i rozwija je po kliknięciu.'
+        )
+      );
+    });
   }
 }
 

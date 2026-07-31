@@ -24,48 +24,57 @@ solar:
   name: Fotowoltaika łącznie
   power: sensor.pv_total_power
   energy: sensor.pv_total_energy_today
-  # strona AC falownika — pokazywana pod sumą, jak w sunsynk
-  voltage: sensor.smart_meter_63a_napiecie_w_fazie_1
-  current: sensor.smart_meter_63a_prad_zmienny_fazy_1
-  frequency: sensor.smart_meter_63a_srednia_faza_czestotliwosci
+  # strona AC — z samego falownika, nie z licznika (licznik widzi cały dom, nie falownik)
+  voltage: sensor.falownik_1_napiecie_pradu_zmiennego
+  current: sensor.falownik_1_prad_zmienny
+  frequency: sensor.falownik_1_czestotliwosc
   status: sensor.falownik_1_status_message
-  # SPRAWDŹ: moc znamionowa falownika (AC) — daje procent wykorzystania przy sumie.
-  # Bez niej karta zsumuje moce szczytowe stringów (14 900 + 10 000 = 24 900 W).
+  # moc znamionowa AC obu falowników — daje procent wykorzystania przy sumie
   max_power: 24900
   strings:
     - name: Falownik 1
       icon: panel
       power: sensor.solarnet_1_fotowoltaika
+      energy: sensor.falownik_1_energia_z_dnia   # 4237 Wh → karta przeliczy na kWh
       voltage: sensor.falownik_1_napiecie_pradu_stalego
       current: sensor.falownik_1_prad_staly
       max_power: 14900
     - name: Falownik 2
       icon: panel
       power: sensor.solarnet_2_fotowoltaika
+      energy: sensor.falownik_2_energia_z_dnia
       voltage: sensor.falownik_2_napiecie_pradu_stalego
       current: sensor.falownik_2_prad_staly
       max_power: 10000
 
 grid:
   name: Sieć
-  # invert USUNIĘTY: przy produkcji 16,9 kW karta pokazywała „Pobór 6,89 kW",
-  # co fizycznie nie ma sensu — to była w rzeczywistości nadwyżka oddawana do sieci.
-  # Jeśli po zmianie kierunek jest odwrotny, dopisz z powrotem `invert: true`.
-  power: sensor.smart_meter_63a_realna_moc
+  # Dwie osobne encje zamiast jednej ze znakiem — zero ryzyka pomyłki kierunku.
+  # Fronius wystawia je gotowe: import 0 W / export 2734 W przy nadwyżce.
+  power_import: sensor.solarnet_1_power_grid_import
+  power_export: sensor.solarnet_1_power_grid_export
+  # Alternatywa (jedna encja ze znakiem, ujemna = oddawanie — bez `invert`):
+  #   power: sensor.smart_meter_63a_realna_moc
+  #
+  # UWAGA: to liczniki od uruchomienia instalacji (38,66 / 35,21 MWh), nie dzienne.
+  # Fronius nie ma dziennych liczników sieci — trzeba zrobić utility_meter (patrz niżej).
   energy_import: sensor.smart_meter_63a_energia_rzeczywista_plus
   energy_export: sensor.smart_meter_63a_energia_rzeczywista_minus
 
 house:
   name: Dom
   # Bez `power:` węzeł domu sumuje moc WSZYSTKICH urządzeń z grup poniżej.
-  # sensor.solarnet_1_power_load_consumed zwracał 0 W, więc go nie używamy.
   #
   # Alternatywy, gdyby suma odbiorników była niepełna:
-  #   power: auto                                   → bilans: PV + sieć − akumulator
-  #   power: sensor.solarnet_1_power_load_consumed  → osobna encja zużycia
+  #   power: sensor.solarnet_1_obciazenie   → realne zużycie całego domu z Froniusa
+  #                                           (SPRAWDŹ znak; jeśli ujemny, dodaj `invert: true`)
+  #   power: auto                           → bilans: PV + sieć − akumulator
   #
-  # SPRAWDŹ: to licznik od początku instalacji (38 MWh), nie dzienny.
-  # Dla sensownego „dzisiaj" zrób utility_meter z cyklem dobowym.
+  # NIE UŻYWAJ sensor.solarnet_1_power_load_consumed — u Ciebie zwraca stałe 0 W.
+  #
+  # Fronius liczy autonomię sam, więc nie musimy jej wyliczać z bilansu:
+  self_sufficiency: sensor.solarnet_1_autonomia_wzgledna
+  # licznik od uruchomienia instalacji — dla „dzisiaj" zrób utility_meter (patrz niżej)
   energy: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
 
 groups:
@@ -207,3 +216,25 @@ groups:
 grid_options:
   columns: full
   rows: auto
+# ---------------------------------------------------------------------------
+# BRAKUJĄCE DANE — do configuration.yaml, potem podmień encje w `grid:` wyżej.
+#
+# Fronius wystawia liczniki sieci tylko od uruchomienia instalacji (38,66 MWh),
+# więc „↓ dzisiaj / ↑ dzisiaj" wymaga własnych liczników dobowych:
+#
+# utility_meter:
+#   grid_import_daily:
+#     source: sensor.smart_meter_63a_energia_rzeczywista_plus
+#     cycle: daily
+#   grid_export_daily:
+#     source: sensor.smart_meter_63a_energia_rzeczywista_minus
+#     cycle: daily
+#   dom_zuzycie_daily:
+#     source: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
+#     cycle: daily
+#
+# Po restarcie:
+#   grid.energy_import: sensor.grid_import_daily
+#   grid.energy_export: sensor.grid_export_daily
+#   house.energy:       sensor.dom_zuzycie_daily
+# ---------------------------------------------------------------------------

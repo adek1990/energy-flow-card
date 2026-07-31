@@ -614,6 +614,7 @@ class EnergyFlowCard extends HTMLElement {
       name: (raw.house && raw.house.name) || null,
       power: (raw.house && raw.house.power) || null,
       energy: (raw.house && raw.house.energy) || null,
+      self_sufficiency: (raw.house && raw.house.self_sufficiency) || null,
       invert: !!(raw.house && raw.house.invert)
     };
 
@@ -1100,6 +1101,14 @@ class EnergyFlowCard extends HTMLElement {
 
   /* -------------------------------------------------- obliczenia modelu */
 
+  /* własna encja autonomii ma pierwszeństwo przed wyliczeniem z bilansu */
+  _selfPct(power, gridImport) {
+    const own = this._numeric(this._cfg.house.self_sufficiency);
+    if (own !== null) return Math.round(Math.max(0, Math.min(100, own)));
+    if (!(power > 0)) return 100;
+    return Math.round((100 * Math.max(0, power - gridImport)) / power);
+  }
+
   _model() {
     const c = this._cfg;
     const idle = c.idle_threshold;
@@ -1296,8 +1305,7 @@ class EnergyFlowCard extends HTMLElement {
         energyEntities: c.house.energy ? asList(c.house.energy) : []
       };
       const gi0 = grid && !grid.off && grid.power > 0 ? grid.power : 0;
-      house0.selfPct =
-        house0.power > 0 ? Math.round((100 * Math.max(0, house0.power - gi0)) / house0.power) : 100;
+      house0.selfPct = this._selfPct(house0.power, gi0);
       return { strings, solar, grid, battery, groups, house: house0 };
     }
 
@@ -1316,8 +1324,7 @@ class EnergyFlowCard extends HTMLElement {
     };
 
     const gridImport = grid && !grid.off && grid.power > 0 ? grid.power : 0;
-    house.selfPct =
-      house.power > 0 ? Math.round((100 * Math.max(0, house.power - gridImport)) / house.power) : 100;
+    house.selfPct = this._selfPct(house.power, gridImport);
 
     return { strings, solar, grid, battery, groups, house };
   }
