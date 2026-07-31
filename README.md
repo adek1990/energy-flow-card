@@ -149,6 +149,38 @@ Encja `energy` jest opcjonalna — bez niej urządzenie pokazuje `—` w kolumni
 w oknie historii są liczone przez całkowanie mocy. Urządzenie z samą encją `energy` nie jest
 traktowane jako awaria: pokazuje `—` w kolumnie mocy i nie jest wygaszane.
 
+### Układ węzłów: przeciąganie myszą
+
+Domyślnie węzły rozkładają się same. Sekcja **Układ węzłów** w edytorze pozwala przejść na
+pozycjonowanie swobodne i ustawić je myszą:
+
+1. Włącz **Swobodne pozycjonowanie** — węzły zostają dokładnie tam, gdzie były, tylko przechodzą
+   na współrzędne procentowe.
+2. Włącz **Tryb przeciągania** — pojawiają się przerywane uchwyty i plakietka `⠿ Układ`.
+3. Przeciągnij węzły w podglądzie. Łączniki przeliczają się w trakcie ruchu, a pozycje zapisują się
+   do konfiguracji automatycznie.
+4. Wyłącz tryb przeciągania, gdy skończysz — kliknięcie węzła znów otwiera historię.
+
+```yaml
+layout:
+  mode: free          # free | auto
+  height: 640         # wysokość karty w px (tryb swobodny nie ma automatycznej wysokości)
+  rail_width: 46      # szerokość szyny odbiorników w % karty
+  nodes:
+    strings:   { x: 50, y: 9 }
+    solar:     { x: 26, y: 32 }
+    hub:       { x: 26, y: 58 }
+    grid:      { x: 9,  y: 58 }
+    batt:      { x: 26, y: 85 }
+    consumers: { x: 72, y: 55 }
+```
+
+Przesuwane bloki to: `strings` (rząd falowników), `solar`, `hub`, `grid`, `batt` i `consumers`
+(cała szyna odbiorników z grupami). Współrzędne są procentami szerokości i wysokości karty
+liczonymi do **środka** bloku, więc układ skaluje się razem z kartą. Bloki nie mogą wyjechać poza
+kartę. Poniżej 720 px karta zawsze wraca do układu pionowego — pozycje pozostają zapisane
+i wracają po poszerzeniu.
+
 ### Kanały urządzenia (zagnieżdżenie)
 
 Urządzenie może mieć własne `devices:` — np. moduł dwukanałowy. Wiersz nadrzędny pokazuje **sumę**

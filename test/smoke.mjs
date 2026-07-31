@@ -45,6 +45,7 @@ globalThis.MouseEvent = window.MouseEvent;
 const cardUrl = new URL('../dist/energy-flow-card.js', import.meta.url).href;
 await import(cardUrl);
 
+const LAY_ALL = ['strings', 'solar', 'hub', 'grid', 'batt', 'consumers'];
 const fails = [];
 const ok = (cond, msg) => {
   if (!cond) fails.push(msg);
@@ -439,6 +440,93 @@ ok(!!c6._modalHost, 'klik w kanał otwiera historię');
 ok(c6._modalHost.textContent.includes('Kanał 1'), 'historia dotyczy klikniętego kanału');
 c6._closeModal();
 ok(c6._nodes['dev_d0_0'].powerEntities.length === 2, 'historia modułu sumuje encje obu kanałów');
+
+console.log('\n— układ swobodny: przeciąganie węzłów —');
+const hass7 = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([S('sensor.pv7', 5000, 'W'), S('sensor.g7', 1000, 'W'), S('sensor.d7', 300, 'W')]),
+  callWS: async () => ({})
+};
+const mkFree = (layout) => {
+  const el = document.createElement('energy-flow-card');
+  el.setConfig({
+    type: 'custom:energy-flow-card',
+    solar: { power: 'sensor.pv7', strings: [{ name: 'S1', power: 'sensor.pv7' }] },
+    grid: { power: 'sensor.g7' },
+    groups: [{ name: 'Klimat', devices: [{ name: 'D', power: 'sensor.d7' }] }],
+    layout
+  });
+  document.body.appendChild(el);
+  el._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600 });
+  el.hass = hass7;
+  return el;
+};
+
+const c7 = mkFree({ mode: 'free', edit: true });
+await new Promise((r) => setTimeout(r, 30));
+const gridEl = c7._q.grid;
+ok(gridEl.classList.contains('free'), 'tryb swobodny włącza pozycjonowanie bezwzględne');
+ok(gridEl.classList.contains('editing'), 'tryb przeciągania dodaje uchwyty');
+ok(gridEl.style.getPropertyValue('--freeh') !== '', `wysokość karty ustawiona: ${gridEl.style.getPropertyValue('--freeh')}`);
+ok(c7.shadowRoot.getElementById('lay-badge').classList.contains('hidden') === false, 'plakietka trybu układu widoczna');
+const hubWrap = c7.shadowRoot.querySelector('[data-lay="hub"]');
+ok(hubWrap.style.left.endsWith('%') && hubWrap.style.top.endsWith('%'), `pozycja w procentach: ${hubWrap.style.left}, ${hubWrap.style.top}`);
+ok(
+  LAY_ALL.every((k) => {
+    const el = c7.shadowRoot.querySelector(`[data-lay="${k}"]`);
+    const x = parseFloat(el.style.left);
+    const y = parseFloat(el.style.top);
+    return x >= 0 && x <= 100 && y >= 0 && y <= 100;
+  }),
+  'wyliczone pozycje mieszczą się w karcie'
+);
+
+// przeciągnięcie węzła domu
+hubWrap.getBoundingClientRect = () => ({ left: 200, top: 250, width: 160, height: 120, right: 360, bottom: 370 });
+hubWrap.setPointerCapture = () => {};
+hubWrap.releasePointerCapture = () => {};
+const ptr = (type, x, y) => {
+  const e = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, button: 0 });
+  e.pointerId = 1;
+  return e;
+};
+let emitted7 = null;
+window.addEventListener('energy-flow-card-layout', (e) => (emitted7 = e.detail));
+hubWrap.dispatchEvent(ptr('pointerdown', 280, 310)); // środek bloku
+ok(hubWrap.classList.contains('dragging'), 'wciśnięcie chwyta blok');
+hubWrap.dispatchEvent(ptr('pointermove', 700, 120));
+ok(hubWrap.style.left === '70%', `blok podąża za wskaźnikiem w poziomie: ${hubWrap.style.left}`);
+ok(hubWrap.style.top === '20%', `blok podąża za wskaźnikiem w pionie: ${hubWrap.style.top}`);
+hubWrap.dispatchEvent(ptr('pointermove', 5000, 5000)); // poza kartę
+ok(parseFloat(hubWrap.style.left) <= 100 && parseFloat(hubWrap.style.top) <= 100, `blok nie ucieka poza kartę: ${hubWrap.style.left}, ${hubWrap.style.top}`);
+hubWrap.dispatchEvent(ptr('pointerup', 5000, 5000));
+ok(!hubWrap.classList.contains('dragging'), 'puszczenie kończy przeciąganie');
+ok(!!emitted7 && !!emitted7.nodes.hub, 'po przeciągnięciu leci zdarzenie z pozycjami');
+ok(LAY_ALL.every((k) => emitted7.nodes[k]), `zdarzenie zawiera wszystkie bloki: ${Object.keys(emitted7.nodes).join(', ')}`);
+
+// łączniki przeliczone po przesunięciu
+await new Promise((r) => setTimeout(r, 30));
+ok(c7.shadowRoot.querySelectorAll('#lyr-idle path').length > 0, 'łączniki istnieją po przesunięciu węzła');
+
+// klik w trybie układu nie otwiera historii
+c7.shadowRoot.querySelector('[data-node="hub"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(!c7._modalHost, 'w trybie przeciągania klik nie otwiera historii');
+
+// tryb pionowy wyłącza układ swobodny
+c7._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 900, right: 400, bottom: 900 });
+c7._measure();
+await new Promise((r) => setTimeout(r, 40));
+ok(!c7._q.grid.classList.contains('free'), 'poniżej 720 px wraca układ pionowy');
+ok(hubWrap.style.left === '', 'pozycje bezwzględne są zdejmowane w trybie pionowym');
+
+// bez trybu edycji: pozycje działają, ale bez uchwytów i z działającą historią
+const c7b = mkFree({ mode: 'free', nodes: { hub: { x: 30, y: 40 } } });
+await new Promise((r) => setTimeout(r, 30));
+ok(c7b._q.grid.classList.contains('free') && !c7b._q.grid.classList.contains('editing'), 'zapisany układ bez trybu przeciągania');
+ok(c7b.shadowRoot.querySelector('[data-lay="hub"]').style.left === '30%', 'pozycja z konfiguracji zastosowana');
+c7b.shadowRoot.querySelector('[data-node="hub"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(!!c7b._modalHost, 'poza trybem przeciągania klik znów otwiera historię');
+c7b._closeModal();
 
 console.log('\n— edytor —');
 const ed = document.createElement('energy-flow-card-editor');

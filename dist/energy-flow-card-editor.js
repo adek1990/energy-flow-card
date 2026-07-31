@@ -26,6 +26,15 @@ const ICON_LABELS = {
   fan: 'Wentylator'
 };
 
+const LAYOUT_LABELS = {
+  strings: 'Falowniki',
+  solar: 'Fotowoltaika',
+  hub: 'Dom',
+  grid: 'Sieć',
+  batt: 'Akumulator',
+  consumers: 'Odbiorniki'
+};
+
 const clone = (o) => JSON.parse(JSON.stringify(o === undefined ? null : o));
 
 const EDITOR_STYLES = `
@@ -69,8 +78,29 @@ class EnergyFlowCardEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._open = { look: true, solar: true, grid: true, batt: true, house: false, groups: true };
+    this._open = { look: true, layout: false, solar: true, grid: true, batt: true, house: false, groups: true };
     this._built = false;
+    /* karta w podglądzie zgłasza tu nowe pozycje po przeciągnięciu węzła */
+    this._onLayout = (ev) => {
+      if (!this._config) return;
+      const d = ev.detail || {};
+      this._config.layout = Object.assign({}, this._config.layout, {
+        mode: 'free',
+        nodes: d.nodes || {},
+        height: d.height,
+        rail_width: d.rail_width
+      });
+      this._emit();
+      if (this._open.layout) this._render();
+    };
+  }
+
+  connectedCallback() {
+    window.addEventListener('energy-flow-card-layout', this._onLayout);
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener('energy-flow-card-layout', this._onLayout);
   }
 
   setConfig(config) {
@@ -295,6 +325,85 @@ class EnergyFlowCardEditor extends HTMLElement {
         b.appendChild(
           this._hint(
             'Wyłączenie okna historii sprawia, że kliknięcie węzła otwiera standardowe okno „więcej informacji” Home Assistanta.'
+          )
+        );
+      })
+    );
+
+    /* --------------------------------------------------------- układ */
+    ed.appendChild(
+      this._section('layout', 'Układ węzłów', (b) => {
+        const L = c.layout || {};
+        const free = L.mode === 'free';
+        const upd = (patch) => {
+          this._config.layout = Object.assign({}, this._config.layout, patch);
+          this._emit();
+        };
+
+        const flags = document.createElement('div');
+        flags.className = 'row tight';
+        flags.appendChild(
+          this._switch('Swobodne pozycjonowanie', free, (v) => {
+            upd({ mode: v ? 'free' : 'auto' });
+            this._render();
+          })
+        );
+        if (free) {
+          flags.appendChild(
+            this._switch('Tryb przeciągania', !!L.edit, (v) => {
+              upd({ edit: v });
+            })
+          );
+        }
+        b.appendChild(flags);
+
+        if (!free) {
+          b.appendChild(
+            this._hint(
+              'Układ automatyczny: węzły rozkładają się same, a szyna odbiorników przelewa się na kolumny. ' +
+                'Włącz swobodne pozycjonowanie, aby ustawić węzły po swojemu.'
+            )
+          );
+          return;
+        }
+
+        b.appendChild(
+          this._row(
+            this._textField('Wysokość karty (px)', L.height || 700, (v) => upd({ height: Number(v) || 700 }), {
+              type: 'number'
+            }),
+            this._textField(
+              'Szerokość szyny odbiorników (%)',
+              L.rail_width || 46,
+              (v) => upd({ rail_width: Number(v) || 46 }),
+              { type: 'number' }
+            )
+          )
+        );
+
+        const nodes = L.nodes || {};
+        const keys = Object.keys(nodes);
+        if (keys.length) {
+          const list = document.createElement('div');
+          list.className = 'hint';
+          list.textContent =
+            'Zapisane pozycje: ' +
+            keys.map((k) => `${LAYOUT_LABELS[k] || k} (${nodes[k].x}%, ${nodes[k].y}%)`).join(' · ');
+          b.appendChild(list);
+        }
+
+        b.appendChild(
+          this._button('Przywróć układ automatyczny', () => {
+            upd({ mode: 'auto', edit: false, nodes: {} });
+            this._render();
+          })
+        );
+
+        b.appendChild(
+          this._hint(
+            'Włącz „Tryb przeciągania" i przeciągnij węzły w podglądzie obok — pozycje zapiszą się tutaj automatycznie, ' +
+              'a linie przeliczą się w trakcie ruchu. Wyłącz tryb przeciągania, gdy skończysz, żeby kliknięcie węzła znów ' +
+              'otwierało historię. Poniżej 720 px karta i tak wraca do układu pionowego.'
           )
         );
       })

@@ -4,7 +4,7 @@
  * Licencja: MIT
  */
 
-const EFC_VERSION = '1.1.0';
+const EFC_VERSION = '1.2.0';
 
 /* eslint-disable no-console */
 console.info(
@@ -87,6 +87,26 @@ const entityLabel = (ref) => {
   return l.length + ' encji · suma';
 };
 
+/* bloki, które można przesuwać w trybie swobodnym */
+const LAY_KEYS = ['strings', 'solar', 'hub', 'grid', 'batt', 'consumers'];
+const LAY_LABELS = {
+  strings: 'Falowniki',
+  solar: 'Fotowoltaika',
+  hub: 'Dom',
+  grid: 'Sieć',
+  batt: 'Akumulator',
+  consumers: 'Odbiorniki'
+};
+/* awaryjne pozycje, gdy nie da się zmierzyć układu automatycznego */
+const LAY_FALLBACK = {
+  strings: { x: 50, y: 9 },
+  solar: { x: 26, y: 32 },
+  hub: { x: 26, y: 58 },
+  grid: { x: 9, y: 58 },
+  batt: { x: 26, y: 85 },
+  consumers: { x: 72, y: 55 }
+};
+
 const slug = (s, i) =>
   (String(s || '')
     .toLowerCase()
@@ -155,6 +175,24 @@ const STYLES = `
 .grid.narrow {
   gap:26px 12px;grid-template-columns:1fr;
   grid-template-areas:"strings" "sum" "hub" "gridn" "batt" "consumers";
+}
+
+/* tryb swobodny: bloki pozycjonowane procentowo względem karty, łączniki liczone z DOM */
+.grid.free { display:block;position:relative;height:var(--freeh,700px); }
+.grid.free > * { position:absolute;transform:translate(-50%,-50%);margin:0;max-width:96%; }
+.grid.free .consumers { width:var(--railw,46%); }
+.grid.free.editing > * {
+  outline:1px dashed color-mix(in oklab,var(--cons) 50%,transparent);outline-offset:7px;
+  border-radius:14px;cursor:grab;touch-action:none;
+}
+.grid.free.editing > *:hover { outline-color:var(--cons); }
+.grid.free.editing > *.dragging { cursor:grabbing;outline-color:var(--cons);z-index:6; }
+.lay-badge {
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:7;
+  display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
+  background:color-mix(in oklab,var(--cons) 16%,var(--panel));border:1px solid var(--cons);
+  font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--cons);
+  pointer-events:none;
 }
 
 [data-off="true"] { opacity:.42;filter:saturate(.15);border-style:dashed !important; }
@@ -455,6 +493,7 @@ class EnergyFlowCard extends HTMLElement {
       g.devices.forEach(markDev);
     });
     this._sig = '';
+    this._derived = null;
     this._build();
     if (this._hass) this._update();
   }
@@ -474,7 +513,14 @@ class EnergyFlowCard extends HTMLElement {
       grid: null,
       battery: null,
       house: null,
-      groups: []
+      groups: [],
+      layout: {
+        mode: raw.layout && raw.layout.mode === 'free' ? 'free' : 'auto',
+        edit: !!(raw.layout && raw.layout.edit),
+        height: Number(raw.layout && raw.layout.height) || 0,
+        rail_width: Number(raw.layout && raw.layout.rail_width) || 46,
+        nodes: Object.assign({}, (raw.layout && raw.layout.nodes) || {})
+      }
     };
 
     if (raw.solar && (raw.solar.strings || []).length) {
@@ -744,11 +790,12 @@ class EnergyFlowCard extends HTMLElement {
       <g id="lyr-idle"></g>
       <g id="lyr-act"></g>
     </svg>
+    <div class="lay-badge hidden" id="lay-badge">⠿ Układ · przeciągnij węzły</div>
 
     <div class="grid" id="grid">
-      <div class="strings ${c.solar ? '' : 'hidden'}" id="strings">${stringsHtml}</div>
+      <div class="strings ${c.solar ? '' : 'hidden'}" id="strings" data-lay="strings">${stringsHtml}</div>
 
-      <div class="sumwrap ${c.solar ? '' : 'hidden'}" id="sumwrap">
+      <div class="sumwrap ${c.solar ? '' : 'hidden'}" id="sumwrap" data-lay="solar">
         <div class="node-sum" data-node="solar-sum">
           ${nodeSvg(22, 'sun')}
           <div>
@@ -768,7 +815,7 @@ class EnergyFlowCard extends HTMLElement {
         </div>
       </div>
 
-      <div class="hubwrap">
+      <div class="hubwrap" data-lay="hub">
         <div class="node-hub" data-node="hub">
           ${nodeSvg(30, 'house')}
           <div class="lbl">${esc(c.house.name)}</div>
@@ -778,7 +825,7 @@ class EnergyFlowCard extends HTMLElement {
         </div>
       </div>
 
-      <div class="gridwrap ${c.grid ? '' : 'hidden'}">
+      <div class="gridwrap ${c.grid ? '' : 'hidden'}" data-lay="grid">
         <div class="node-grid" data-node="grid">
           ${nodeSvg(24, 'tower')}
           <div>
@@ -789,7 +836,7 @@ class EnergyFlowCard extends HTMLElement {
         </div>
       </div>
 
-      <div class="battwrap ${c.battery ? '' : 'hidden'}">
+      <div class="battwrap ${c.battery ? '' : 'hidden'}" data-lay="batt">
         <div class="node-batt" data-node="batt">
           ${nodeSvg(24, 'battery')}
           <div>
@@ -803,7 +850,7 @@ class EnergyFlowCard extends HTMLElement {
         </div>
       </div>
 
-      <div class="consumers">
+      <div class="consumers" data-lay="consumers">
         <div class="cons-head">
           <div class="cons-title" id="cons-title">Odbiorniki</div>
           <div class="cons-rule"></div>
@@ -840,6 +887,7 @@ class EnergyFlowCard extends HTMLElement {
     this._built = true;
     this._cacheRefs();
     this._bindEvents();
+    this._bindDrag();
 
     const card = root.getElementById('card');
     if (this._ro) this._ro.disconnect();
@@ -895,6 +943,8 @@ class EnergyFlowCard extends HTMLElement {
     root.querySelectorAll('[data-node]').forEach((el) => {
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        /* po przeciągnięciu bloku nie otwieramy historii */
+        if (this._suppressClick || this._layoutEditing()) return;
         /* moduł z kanałami rozwija listę zamiast otwierać historię */
         if (el.hasAttribute('data-devtoggle')) return;
         const n = this._nodes && this._nodes[el.dataset.node];
@@ -1408,7 +1458,174 @@ class EnergyFlowCard extends HTMLElement {
     this._q.groups.style.setProperty('--colmin', colMin + 'px');
 
     this._applyExpansion();
+    this._applyLayout();
     this._measure();
+  }
+
+  /* ------------------------------------------------------------- układ */
+
+  _layEl(key) {
+    return this.shadowRoot.querySelector(`[data-lay="${key}"]`);
+  }
+
+  _layoutActive() {
+    return this._cfg && this._cfg.layout.mode === 'free' && !this._narrow;
+  }
+
+  _layoutEditing() {
+    return this._layoutActive() && this._cfg.layout.edit;
+  }
+
+  /* pozycje z układu automatycznego → procenty, żeby przejście w tryb swobodny nic nie przesunęło */
+  _deriveLayout() {
+    const card = this._q.card.getBoundingClientRect();
+    if (!card.width || !card.height) return null;
+    const out = {};
+    LAY_KEYS.forEach((k) => {
+      const el = this._layEl(k);
+      if (!el || el.classList.contains('hidden')) return;
+      const b = el.getBoundingClientRect();
+      if (!b.width || !b.height) return;
+      /* pomiar w trakcie przebudowy układu potrafi wyjść poza kartę — przycinamy */
+      const pin = (v) => +Math.max(2, Math.min(98, v)).toFixed(2);
+      out[k] = {
+        x: pin(((b.left - card.left + b.width / 2) / card.width) * 100),
+        y: pin(((b.top - card.top + b.height / 2) / card.height) * 100)
+      };
+    });
+    return Object.keys(out).length ? { nodes: out, height: Math.round(card.height) } : null;
+  }
+
+  _layoutPositions() {
+    const stored = this._cfg.layout.nodes || {};
+    const derived = (this._derived && this._derived.nodes) || {};
+    const out = {};
+    LAY_KEYS.forEach((k) => {
+      out[k] = stored[k] || derived[k] || LAY_FALLBACK[k];
+    });
+    return out;
+  }
+
+  _applyLayout() {
+    if (!this._built || !this._q) return;
+    const grid = this._q.grid;
+    const active = this._layoutActive();
+    const badge = this.shadowRoot.getElementById('lay-badge');
+
+    if (!active) {
+      grid.classList.remove('free', 'editing');
+      grid.style.removeProperty('--freeh');
+      grid.style.removeProperty('--railw');
+      LAY_KEYS.forEach((k) => {
+        const el = this._layEl(k);
+        if (el) {
+          el.style.removeProperty('left');
+          el.style.removeProperty('top');
+        }
+      });
+      if (badge) badge.classList.add('hidden');
+      return;
+    }
+
+    /* zanim przełączymy na pozycjonowanie bezwzględne, zapamiętaj układ automatyczny */
+    if (!this._derived && !grid.classList.contains('free')) this._derived = this._deriveLayout();
+
+    const L = this._cfg.layout;
+    const height = L.height || (this._derived && this._derived.height) || 700;
+    grid.classList.add('free');
+    grid.classList.toggle('editing', !!L.edit);
+    grid.style.setProperty('--freeh', height + 'px');
+    grid.style.setProperty('--railw', L.rail_width + '%');
+
+    const pos = this._layoutPositions();
+    LAY_KEYS.forEach((k) => {
+      const el = this._layEl(k);
+      if (!el) return;
+      el.style.left = pos[k].x + '%';
+      el.style.top = pos[k].y + '%';
+    });
+
+    if (badge) badge.classList.toggle('hidden', !L.edit);
+  }
+
+  _bindDrag() {
+    LAY_KEYS.forEach((key) => {
+      const el = this._layEl(key);
+      if (!el) return;
+
+      el.addEventListener('pointerdown', (ev) => {
+        if (!this._layoutEditing() || ev.button !== 0) return;
+        const card = this._q.card.getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        /* uchwyt liczony od środka bloku, bo transform to translate(-50%,-50%) */
+        const grabX = ev.clientX - (box.left + box.width / 2);
+        const grabY = ev.clientY - (box.top + box.height / 2);
+        const halfX = (box.width / 2 / card.width) * 100;
+        const halfY = (box.height / 2 / card.height) * 100;
+
+        this._drag = { key, el, card, grabX, grabY, halfX, halfY, moved: false };
+        el.classList.add('dragging');
+        el.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+        ev.stopPropagation();
+      });
+
+      el.addEventListener('pointermove', (ev) => {
+        const d = this._drag;
+        if (!d || d.el !== el) return;
+        const x = ((ev.clientX - d.grabX - d.card.left) / d.card.width) * 100;
+        const y = ((ev.clientY - d.grabY - d.card.top) / d.card.height) * 100;
+        const clamp = (v, half) => Math.max(half, Math.min(100 - half, v));
+        const nx = +clamp(x, d.halfX).toFixed(2);
+        const ny = +clamp(y, d.halfY).toFixed(2);
+        d.moved = true;
+        this._cfg.layout.nodes[d.key] = { x: nx, y: ny };
+        el.style.left = nx + '%';
+        el.style.top = ny + '%';
+        if (!this._dragRaf) {
+          this._dragRaf = requestAnimationFrame(() => {
+            this._dragRaf = null;
+            this._measure();
+          });
+        }
+      });
+
+      const end = (ev) => {
+        const d = this._drag;
+        if (!d || d.el !== el) return;
+        el.classList.remove('dragging');
+        try {
+          el.releasePointerCapture(ev.pointerId);
+        } catch (e) {
+          /* wskaźnik mógł już zostać zwolniony */
+        }
+        this._drag = null;
+        if (d.moved) {
+          this._suppressClick = true;
+          setTimeout(() => {
+            this._suppressClick = false;
+          }, 0);
+          this._emitLayout();
+          this._measure();
+        }
+      };
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+    });
+  }
+
+  /* edytor karty nasłuchuje tego zdarzenia i zapisuje pozycje do konfiguracji */
+  _emitLayout() {
+    const L = this._cfg.layout;
+    window.dispatchEvent(
+      new CustomEvent('energy-flow-card-layout', {
+        detail: {
+          nodes: Object.assign({}, this._layoutPositions(), L.nodes),
+          height: L.height || (this._derived && this._derived.height) || 700,
+          rail_width: L.rail_width
+        }
+      })
+    );
   }
 
   /* ------------------------------------------------------------ ścieżki */
@@ -1487,6 +1704,8 @@ class EnergyFlowCard extends HTMLElement {
       }
       const total = this._m ? this._m.groups.reduce((t, g) => t + g.leafCount, 0) : 0;
       this._q.groups.style.setProperty('--colmin', (narrow ? 150 : total > 18 ? 190 : 215) + 'px');
+      /* tryb pionowy zawsze wygrywa z układem swobodnym */
+      this._applyLayout();
       requestAnimationFrame(() => this._measure());
       return;
     }
