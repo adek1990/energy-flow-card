@@ -133,7 +133,24 @@ pokazywane liczbowo, ale pasek zatrzymuje się na 100%.
 |----------|------|
 | `name`   | Nazwa węzła centralnego (domyślnie `Dom`) |
 | `power`  | Moc całkowita. Bez tego pola — suma mocy wszystkich urządzeń z grup. Wartość `auto` — bilans węzła: `fotowoltaika + sieć − akumulator` |
-| `energy` | Energia dobowa; bez niej suma z grup |
+| `energy` | Energia dobowa; bez niej suma z grup. Wartość `auto` — bilans: `produkcja PV + pobór z sieci − oddanie do sieci` |
+| `self_sufficiency` | Encja autonomii w %; bez niej karta liczy ją z bilansu |
+| `unmetered` | `true` albo `{name, icon}` — dodatkowy węzeł „Niezmierzone" z różnicą między mocą domu a sumą opomiarowanych grup |
+
+### Podsumowanie dnia
+
+Pod kartą pojawia się pasek z pięcioma wartościami: **wyprodukowano**, **zużył dom**, **zużyte z PV**
+(z procentem autokonsumpcji), **oddane do sieci** i **pobrane z sieci** (z procentem zużycia).
+Kafelki bez danych chowają się same; cały pasek wyłącza `summary: false`.
+
+Zużycie domu i autokonsumpcja mają sens tylko przy **dziennych** licznikach energii. Liczniki od
+uruchomienia instalacji (typowe dla falowników) dadzą megawatogodziny zamiast dzisiejszych kilowatogodzin.
+
+### Węzeł „Niezmierzone"
+
+Gdy moc domu pochodzi z bilansu (`power: auto`) lub osobnej encji, a opomiarowana jest tylko część
+instalacji, `unmetered` dokłada na szynie odbiorników kafelek z resztą — przerywana ramka, bez
+rozwijania. Dzięki temu linie się domykają: suma grup plus reszta równa się mocy domu.
 
 `power: auto` przydaje się, gdy falownik nie raportuje zużycia (np. Fronius bez licznika
 obciążenia w SolarNet zwraca `0 W`), a odbiorniki są opomiarowane tylko częściowo.
@@ -286,6 +303,11 @@ Liczby są formatowane wg polskiej lokalizacji (przecinek dziesiętny).
   dłuższych zakresów, `types: ['change']`). Jeśli encja nie ma statystyk długoterminowych, słupki są
   liczone przez całkowanie przebiegu mocy.
 - Zakres własny: kalendarz z polskimi nazwami miesięcy, tydzień od poniedziałku, wybór dwóch dat.
+- **Nawigacja po czasie** — `‹` i `›` przesuwają okno o jego własną długość, `−` i `+` je poszerzają
+  i zawężają dwukrotnie (zoom trzyma środek), a pola **od/do** przyjmują datę **razem z godziną**.
+  Okno nie wychodzi w przyszłość, minimum to 15 minut, maksimum rok. Podpis obok pokazuje
+  przedział i jego długość, np. `31.7 08:30 → 31.7 22:12 · 13,7 godz.`
+- Poniżej 48 godzin słupki energii są godzinowe, powyżej — dobowe.
 - **Celownik pod kursorem** — pionowa linia z punktem na serii i wartością w danym momencie
   (moc w W/kW z godziną, energia w kWh z datą słupka). Linia przyskakuje do najbliższej próbki,
   więc punkt zawsze leży dokładnie na wykresie, a nie obok niego.

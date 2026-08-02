@@ -3,7 +3,8 @@
 # Fronius Symo (2 falowniki) + Smart Meter 63A + Shelly Pro 3EM + 13× Sonoff Dual R3
 #
 # Zasada: `power` = moc chwilowa (W/kW), `energy` = licznik narastający (kWh).
-# Węzeł domu sumuje moc wszystkich urządzeń z grup poniżej.
+# Moc i energia domu liczone z bilansu (auto), a różnica względem opomiarowanych
+# odbiorników trafia do węzła "Niezmierzone".
 #
 # Po wgraniu sprawdź konsolę przeglądarki (F12) — karta wypisuje każde nieistniejące
 # entity_id, a w interfejsie pokazuje przy nim „brak encji".
@@ -56,10 +57,17 @@ grid:
   # Alternatywa (jedna encja ze znakiem, ujemna = oddawanie, bez `invert`):
   #   power: sensor.smart_meter_63a_realna_moc
   #
-  # UWAGA: liczniki od uruchomienia instalacji (38,66 / 35,21 MWh), nie dzienne.
-  # Dla „↓ dzisiaj / ↑ dzisiaj" użyj utility_meter — blok na końcu pliku.
-  energy_import: sensor.smart_meter_63a_energia_rzeczywista_plus
-  energy_export: sensor.smart_meter_63a_energia_rzeczywista_minus
+  # Liczniki Energi są DZIENNE i rozbite na strefy taryfowe — karta sumuje listę.
+  # "consumed" = pobór z sieci, "produced" = oddanie do sieci.
+  energy_import:
+    - sensor.energa_my_meter_30985961_consumed_strefa_1_dzienna
+    - sensor.energa_my_meter_30985961_consumed_strefa_2_nocna
+  energy_export:
+    - sensor.energa_my_meter_30985961_produced_strefa_1_dzienna
+    - sensor.energa_my_meter_30985961_produced_strefa_2_nocna
+  # Liczniki Froniusa są od uruchomienia instalacji (38,66 / 35,21 MWh) — nie nadają się:
+  #   energy_import: sensor.smart_meter_63a_energia_rzeczywista_plus
+  #   energy_export: sensor.smart_meter_63a_energia_rzeczywista_minus
 
 house:
   name: Dom
@@ -74,9 +82,13 @@ house:
   # NIE UŻYWAJ sensor.solarnet_1_power_load_consumed — zwraca stałe 0 W.
   power: auto
   self_sufficiency: sensor.solarnet_1_autonomia_wzgledna
-  # UWAGA: to licznik od uruchomienia instalacji (38,66 MWh) — pokazuje MWh, nie „dzisiaj".
-  # Podmień na utility_meter dobowy (blok na końcu pliku).
-  energy: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
+  # "auto" = produkcja PV + pobór z sieci − oddanie do sieci.
+  # To jedyny sposób na realne zużycie domu, bo licznik Froniusa jest od uruchomienia instalacji.
+  energy: auto
+  # Reszta domu poza opomiarowanymi grupami — osobny węzeł na szynie odbiorników:
+  unmetered:
+    name: Niezmierzone
+    icon: house
 
 groups:
   - name: Wentylacja
@@ -99,8 +111,8 @@ groups:
         # SPRAWDŹ: Shelly Pro 3EM mierzy 3 fazy — ta encja może być tylko jedną z nich.
         # Suma trzech faz to zwykle sensor.shellypro3em_..._total_active_power
         power: sensor.shellypro3em_fce8c0daec00_power
-        # UWAGA: 620,6 kWh to licznik od podłączenia Shelly, nie „dzisiaj".
-        # Zrób utility_meter dobowy — blok na końcu pliku.
+        # UWAGA: 620,6 kWh to licznik od podłączenia Shelly, nie „dzisiaj" —
+        # zaniża węzeł "Niezmierzone". Zrób utility_meter dobowy (blok na końcu pliku).
         energy: sensor.shellypro3em_fce8c0daec00_energy
 
   # Każdy moduł pokazuje sumę obu kanałów i rozwija je po kliknięciu.
@@ -258,29 +270,15 @@ grid_options:
   rows: auto
 
 # =============================================================================
-# BRAKUJĄCE DANE — do configuration.yaml, potem podmień encje w `grid:` i `house:`.
-#
-# Fronius wystawia liczniki sieci tylko od uruchomienia instalacji (38,66 MWh),
-# więc „dzisiaj" wymaga własnych liczników dobowych:
-#
-# utility_meter:
-#   grid_import_daily:
-#     source: sensor.smart_meter_63a_energia_rzeczywista_plus
-#     cycle: daily
-#   grid_export_daily:
-#     source: sensor.smart_meter_63a_energia_rzeczywista_minus
-#     cycle: daily
-#   dom_zuzycie_daily:
-#     source: sensor.smart_meter_63a_energia_rzeczywista_zuzyta
-#     cycle: daily
-#
-# Po restarcie HA:
-#   grid.energy_import: sensor.grid_import_daily
-#   grid.energy_export: sensor.grid_export_daily
-#   house.energy:       sensor.dom_zuzycie_daily
-#
-# Opcjonalnie — poprawka błędnej klasy licznika rekuperatora (customize.yaml):
+# OPCJONALNIE — poprawka błędnej klasy licznika rekuperatora (customize.yaml):
 #   sensor.rekuperator_dzis:
 #     device_class: energy
 #     unit_of_measurement: kWh
+#
+# Dzienny licznik pompy ciepła (Shelly liczy od podłączenia) — configuration.yaml:
+#   utility_meter:
+#     pompa_ciepla_daily:
+#       source: sensor.shellypro3em_fce8c0daec00_energy
+#       cycle: daily
+#   → potem: groups[Ogrzewanie].devices[Pompa ciepła].energy: sensor.pompa_ciepla_daily
 # =============================================================================

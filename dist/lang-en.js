@@ -96,6 +96,17 @@ export default {
   ],
   dow: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
 
+  /* time navigation */
+  win_from: 'from',
+  win_to: 'to',
+  win_prev: 'Shift back',
+  win_next: 'Shift forward',
+  win_zoom_in: 'Zoom in',
+  win_zoom_out: 'Zoom out',
+  win_min: 'min',
+  win_hours: 'h',
+  win_days: 'days',
+
   /* layout */
   layout: '⠿ Layout',
   layout_done: '✓ Done',

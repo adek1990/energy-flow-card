@@ -227,6 +227,41 @@ bw.getBoundingClientRect = () => ({ left: 100, top: 300, width: 600, height: 110
 bw.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 350, bubbles: true }));
 ok(/kWh$/.test(bw.querySelector('.cross-tip .v').textContent), `słupki też mają odczyt: ${bw.querySelector('.cross-tip .v').textContent}`);
 
+// nawigacja po oknie czasowym
+const winMs = () => card._modal.win.end - card._modal.win.start;
+const w0 = { start: card._modal.win.start, end: card._modal.win.end, ms: winMs() };
+ok(!!card._modalHost.querySelector('#win-start') && !!card._modalHost.querySelector('#win-end'), 'pola od/do z godziną');
+ok(
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(card._modalHost.querySelector('#win-start').value),
+  `pole „od" ma datę i godzinę: ${card._modalHost.querySelector('#win-start').value}`
+);
+card._modalHost.querySelector('#win-prev').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 40));
+ok(card._modal.win.end === w0.start, 'strzałka wstecz przesuwa okno o jego długość');
+ok(winMs() === w0.ms, 'przesunięcie nie zmienia długości okna');
+const midBefore = card._modal.win.start + winMs() / 2;
+card._modalHost.querySelector('#win-in').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 40));
+ok(Math.abs(winMs() - w0.ms / 2) < 2, `„+" zawęża okno dwukrotnie: ${Math.round(winMs() / 60000)} min`);
+ok(Math.abs(card._modal.win.start + winMs() / 2 - midBefore) < 2, 'zoom trzyma środek okna');
+card._modalHost.querySelector('#win-out').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 40));
+ok(Math.abs(winMs() - w0.ms) < 4, '„−" wraca do poprzedniej długości');
+
+// nie wychodzimy w przyszłość
+card._modal.win = { start: Date.now() - 3600000, end: Date.now() };
+card._modalHost.querySelector('#win-next').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 40));
+ok(card._modal.win.end <= Date.now() + 1000, 'strzałka naprzód nie wychodzi w przyszłość');
+
+// ręczne ustawienie godzin
+const st = card._modalHost.querySelector('#win-start');
+st.value = '2026-07-31T08:30';
+st.dispatchEvent(new window.Event('change', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 40));
+ok(new Date(card._modal.win.start).getHours() === 8 && new Date(card._modal.win.start).getMinutes() === 30, 'godzina z pola „od" trafia do okna');
+ok(card._modalHost.textContent.includes('→'), 'podpis pokazuje przedział z godzinami');
+
 card._modal.range = 'custom';
 card._renderModal();
 ok(card._modalHost.textContent.includes('wybierz datę początkową'), 'kalendarz zakresu własnego');
@@ -494,6 +529,31 @@ ok(stat('produced').querySelector('.val').textContent === '84,8 kWh', `kafelek p
 ok(stat('consumed').querySelector('.val').textContent === '97,2 kWh', `kafelek zużycia domu: ${stat('consumed').querySelector('.val').textContent}`);
 ok(stat('exported').querySelector('.sub').textContent === '6% produkcji', `podpis oddanego: ${stat('exported').querySelector('.sub').textContent}`);
 ok(stat('imported').querySelector('.sub').textContent === '18% zużycia', `podpis pobranego: ${stat('imported').querySelector('.sub').textContent}`);
+
+// brak liczników sieci ≠ zerowe liczniki
+const cnull = document.createElement('energy-flow-card');
+cnull.setConfig({
+  type: 'custom:energy-flow-card',
+  solar: { power: 'sensor.pv_p', energy: 'sensor.pv_e', strings: [{ name: 'S', power: 'sensor.pv_p' }] },
+  grid: { power_export: 'sensor.gexp', energy_import: 'sensor.nie_ma_importu' },
+  house: { power: 'auto', energy: 'auto' },
+  groups: []
+});
+document.body.appendChild(cnull);
+cnull._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cnull.hass = hassE;
+await new Promise((r) => setTimeout(r, 30));
+const gk = cnull.shadowRoot.querySelector('[data-node="grid"] [data-f="kwh"]').textContent;
+ok(gk === '↓ —   ↑ —', `brak licznika sieci pokazuje „—", nie 0,00: ${gk}`);
+ok(cnull._m.house.energy === null, 'bez licznika poboru energia domu nie jest zmyślana');
+ok(
+  cnull.shadowRoot.getElementById('summary').querySelector('[data-stat="consumed"]').classList.contains('hidden'),
+  'kafelek zużycia domu chowa się przy braku danych'
+);
+ok(
+  !cnull.shadowRoot.getElementById('summary').querySelector('[data-stat="produced"]').classList.contains('hidden'),
+  'kafelek produkcji zostaje, bo dane są'
+);
 
 const um = ce._m.groups.find((g) => g.virtual);
 ok(!!um, 'grupa niezmierzona istnieje');

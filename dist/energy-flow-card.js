@@ -7,7 +7,7 @@
 import PL from './lang-pl.js';
 import EN from './lang-en.js';
 
-const EFC_VERSION = '1.4.0';
+const EFC_VERSION = '1.6.0';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -422,6 +422,15 @@ const STYLES = `
 }
 .chip.on { color:var(--bg); }
 .m-cap { font-size:11px;color:var(--mut); }
+.chip.nav { min-width:30px;text-align:center;font-size:14px;padding:5px 9px;line-height:1.2; }
+.chip.nav:hover { color:var(--tx);background:color-mix(in oklab,var(--cons) 14%,transparent); }
+.win-range { display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
+.win-range .lbl { font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut); }
+.win-input {
+  padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--panel);
+  color:var(--tx);font-size:11px;font-family:inherit;color-scheme:dark;
+}
+.win-input:focus { outline:none;border-color:var(--cons); }
 .picker { padding:16px 20px;border-bottom:1px solid var(--line);background:var(--panel); }
 .pk-head { display:flex;align-items:center;gap:12px;margin-bottom:12px; }
 .pk-nav {
@@ -1553,7 +1562,8 @@ class EnergyFlowCard extends HTMLElement {
       set(
         el,
         'kwh',
-        m.grid.off ? '—' : '↓ ' + fmtKwh(m.grid.energyImport || 0) + '   ↑ ' + fmtKwh(m.grid.energyExport || 0)
+        /* brak odczytu pokazujemy jako „—", nie jako 0,00 — inaczej wygląda jak zerowy licznik */
+        m.grid.off ? '—' : '↓ ' + fmtKwh(m.grid.energyImport) + '   ↑ ' + fmtKwh(m.grid.energyExport)
       );
       flags(el, m.grid.off, !m.grid.off && m.grid.idle);
       nodes.grid = {
@@ -2191,6 +2201,7 @@ class EnergyFlowCard extends HTMLElement {
     this._modal = {
       node,
       range: 'today',
+      win: this._presetWin('today'),
       sel: [],
       month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
       loading: true,
@@ -2231,29 +2242,111 @@ class EnergyFlowCard extends HTMLElement {
     if (k) k.textContent = (src.off ? '—' : fmtKwh(src.energy)) + ' ' + this._tx('today_suffix');
   }
 
-  _rangeBounds() {
-    const m = this._modal;
+  /* preset → okno czasowe; dalej operujemy już tylko na oknie */
+  _presetWin(key) {
     const now = new Date();
     const today = startOfDay(now);
-    switch (m.range) {
+    switch (key) {
+      /* zawsze znaczniki czasu — Date + liczba dałoby sklejony tekst */
       case 'today':
-        return { start: today, end: now, single: true, days: 1 };
+        return { start: today.getTime(), end: now.getTime() };
       case 'yesterday':
-        return { start: addDays(today, -1), end: today, single: true, days: 1 };
+        return { start: addDays(today, -1).getTime(), end: today.getTime() };
       case '7d':
-        return { start: addDays(today, -6), end: now, single: false, days: 7 };
+        return { start: addDays(today, -6).getTime(), end: now.getTime() };
       case '30d':
-        return { start: addDays(today, -29), end: now, single: false, days: 30 };
-      case 'custom': {
-        if (m.sel.length < 2) return null;
-        const a = new Date(Math.min.apply(null, m.sel));
-        const b = addDays(new Date(Math.max.apply(null, m.sel)), 1);
-        const days = Math.max(1, Math.round((b - a) / 86400000));
-        return { start: a, end: b, single: days === 1, days };
-      }
+        return { start: addDays(today, -29).getTime(), end: now.getTime() };
       default:
-        return { start: today, end: now, single: true, days: 1 };
+        return null;
     }
+  }
+
+  _rangeBounds() {
+    const w = this._modal && this._modal.win;
+    if (!w || !(w.end > w.start)) return null;
+    const ms = w.end - w.start;
+    return {
+      start: new Date(w.start),
+      end: new Date(w.end),
+      /* do dwóch dób rysujemy godzinowo, powyżej — dobowo */
+      single: ms <= 48 * 3600000,
+      days: Math.max(1, Math.round(ms / 86400000))
+    };
+  }
+
+  /* przesunięcie okna o jego własną długość */
+  _shiftWin(dir) {
+    const m = this._modal;
+    if (!m.win) return;
+    const dur = m.win.end - m.win.start;
+    let start = m.win.start + dur * dir;
+    let end = m.win.end + dur * dir;
+    const now = Date.now();
+    if (end > now) {
+      /* nie wychodzimy w przyszłość — dosuwamy okno do teraz */
+      start -= end - now;
+      end = now;
+    }
+    m.win = { start, end };
+    m.range = 'window';
+    this._loadHistory();
+  }
+
+  /* zoom wokół środka okna */
+  _zoomWin(k) {
+    const m = this._modal;
+    if (!m.win) return;
+    const dur = m.win.end - m.win.start;
+    const mid = m.win.start + dur / 2;
+    const next = Math.min(370 * 86400000, Math.max(15 * 60000, dur * k));
+    let start = mid - next / 2;
+    let end = mid + next / 2;
+    const now = Date.now();
+    if (end > now) {
+      start -= end - now;
+      end = now;
+    }
+    m.win = { start, end };
+    m.range = 'window';
+    this._loadHistory();
+  }
+
+  /* pole „od" / „do" (datetime-local) */
+  _setWinEdge(which, value) {
+    const m = this._modal;
+    if (!m.win || !value) return;
+    const t = new Date(value).getTime();
+    if (Number.isNaN(t)) return;
+    const win = { start: m.win.start, end: m.win.end };
+    win[which] = t;
+    if (win.end - win.start < 60000) return;
+    m.win = win;
+    m.range = 'window';
+    this._loadHistory();
+  }
+
+  /* wartość dla <input type="datetime-local"> w czasie lokalnym */
+  _localInput(t) {
+    const d = new Date(t);
+    const p = (v) => String(v).padStart(2, '0');
+    return (
+      d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes())
+    );
+  }
+
+  /* czytelna długość okna: „6 godz.", „3 dni" */
+  _winLabel(b) {
+    const ms = b.end - b.start;
+    const h = ms / 3600000;
+    if (h < 1) return Math.round(ms / 60000) + ' ' + this._tx('win_min');
+    if (h < 48) return (h < 10 ? Math.round(h * 10) / 10 : Math.round(h)) + ' ' + this._tx('win_hours');
+    return Math.round(h / 24) + ' ' + this._tx('win_days');
+  }
+
+  _fmtStamp(t) {
+    const d = new Date(t);
+    const p = (v) => String(v).padStart(2, '0');
+    return d.getDate() + '.' + (d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
   }
 
   async _loadHistory() {
@@ -2561,14 +2654,9 @@ class EnergyFlowCard extends HTMLElement {
         m.range === key ? 'background:' + accent : ''
       }">${label}</div>`;
 
-    const caption =
-      m.range === 'custom'
-        ? m.sel.length === 2
-          ? this._fmtDay(Math.min.apply(null, m.sel)) + ' → ' + this._fmtDay(Math.max.apply(null, m.sel))
-          : t('pick_range')
-        : b
-        ? this._fmtDay(b.start) + ' → ' + (m.range === 'yesterday' ? this._fmtDay(b.end - 1) : t('now'))
-        : '';
+    const caption = b
+      ? this._fmtStamp(b.start) + ' → ' + this._fmtStamp(b.end) + '  ·  ' + this._winLabel(b)
+      : t('pick_range');
 
     let body;
     if (m.loading) {
@@ -2594,7 +2682,7 @@ class EnergyFlowCard extends HTMLElement {
         <svg width="34" height="34" viewBox="0 0 24 24" style="color:var(--mut);opacity:.6"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="5" width="18" height="15" rx="2"></rect><path d="M3 10h18M8 5V3M16 5V3M8.5 15.5l7-4"></path></g></svg>
         <div class="state-t">${t('no_history')}</div>
         <div class="state-s">${
-          m.range === 'custom' && m.sel.length < 2
+          !b
             ? t('no_history_pick')
             : n.off
             ? t('no_history_off')
@@ -2696,6 +2784,18 @@ class EnergyFlowCard extends HTMLElement {
     <div class="chips">
       ${chip('today', t('range_today'))}${chip('yesterday', t('range_yesterday'))}${chip('7d', t('range_7d'))}${chip('30d', t('range_30d'))}${chip('custom', t('range_custom'))}
     </div>
+    <div class="chips">
+      <div class="chip nav" id="win-prev" title="${t('win_prev')}">‹</div>
+      <div class="chip nav" id="win-out" title="${t('win_zoom_out')}">−</div>
+      <div class="chip nav" id="win-in" title="${t('win_zoom_in')}">+</div>
+      <div class="chip nav" id="win-next" title="${t('win_next')}">›</div>
+    </div>
+    <div class="win-range">
+      <span class="mono lbl">${t('win_from')}</span>
+      <input type="datetime-local" class="mono win-input" id="win-start" value="${b ? this._localInput(b.start) : ''}" />
+      <span class="mono lbl">${t('win_to')}</span>
+      <input type="datetime-local" class="mono win-input" id="win-end" value="${b ? this._localInput(b.end) : ''}" />
+    </div>
     <div style="flex:1"></div>
     <div class="mono m-cap">${esc(caption)}</div>
   </div>
@@ -2728,10 +2828,28 @@ class EnergyFlowCard extends HTMLElement {
     h.querySelectorAll('[data-range]').forEach((el) =>
       el.addEventListener('click', () => {
         m.range = el.dataset.range;
-        if (m.range !== 'custom') m.sel = [];
-        this._loadHistory();
+        if (m.range !== 'custom') {
+          m.sel = [];
+          m.win = this._presetWin(m.range);
+          this._loadHistory();
+        } else {
+          this._renderModal();
+        }
       })
     );
+
+    const on = (id, fn) => {
+      const el = h.querySelector('#' + id);
+      if (el) el.addEventListener('click', fn);
+    };
+    on('win-prev', () => this._shiftWin(-1));
+    on('win-next', () => this._shiftWin(1));
+    on('win-out', () => this._zoomWin(2));
+    on('win-in', () => this._zoomWin(0.5));
+    ['start', 'end'].forEach((which) => {
+      const el = h.querySelector('#win-' + which);
+      if (el) el.addEventListener('change', () => this._setWinEdge(which, el.value));
+    });
     const prev = h.querySelector('#pk-prev');
     const next = h.querySelector('#pk-next');
     if (prev)
@@ -2750,8 +2868,15 @@ class EnergyFlowCard extends HTMLElement {
       el.addEventListener('click', () => {
         const ts = Number(el.dataset.day);
         m.sel = m.sel.length >= 2 ? [ts] : m.sel.concat(ts).sort((a, b) => a - b);
-        if (m.sel.length === 2) this._loadHistory();
-        else this._renderModal();
+        if (m.sel.length === 2) {
+          m.win = {
+            start: Math.min.apply(null, m.sel),
+            end: addDays(new Date(Math.max.apply(null, m.sel)), 1).getTime()
+          };
+          this._loadHistory();
+        } else {
+          this._renderModal();
+        }
       })
     );
   }

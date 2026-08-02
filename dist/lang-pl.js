@@ -96,6 +96,17 @@ export default {
   ],
   dow: ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'ndz'],
 
+  /* nawigacja po czasie */
+  win_from: 'od',
+  win_to: 'do',
+  win_prev: 'Przesuń wstecz',
+  win_next: 'Przesuń naprzód',
+  win_zoom_in: 'Zawęź zakres',
+  win_zoom_out: 'Poszerz zakres',
+  win_min: 'min',
+  win_hours: 'godz.',
+  win_days: 'dni',
+
   /* układ */
   layout: '⠿ Układ',
   layout_done: '✓ Gotowe',
