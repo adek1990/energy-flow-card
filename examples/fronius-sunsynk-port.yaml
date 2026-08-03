@@ -95,6 +95,17 @@ house:
     name: Niezmierzone
     icon: house
 
+# Automatycznie zbiera encje mocy, których nie przypisałeś do żadnej grupy.
+# Pomija wszystko, co już jest w konfiguracji (PV, sieć, akumulator, dom, grupy).
+auto_discover:
+  name: Nieprzypisane
+  icon: plug
+  limit: 40          # maksymalna liczba pozycji
+  # min_power: 5     # pomiń encje poniżej progu (W)
+  # exclude:         # pomiń po fragmencie entity_id
+  #   - _test
+  #   - debug
+
 groups:
   - name: Wentylacja
     icon: fan
@@ -292,8 +303,15 @@ groups:
             voltage: sensor.zamel_mew_01_0_electricity_meter_voltage_phase_1
             current: sensor.zamel_mew_01_0_electricity_meter_current_phase_1
             energy: sensor.altana_faza_1_daily
+          # ODWROTNIE ZAMONTOWANY PRZEKŁADNIK na L2. Dowód z rejestrów licznika:
+          #   forward L2 = 0,18 kWh  |  reverse L2 = 6943 kWh
+          #   (dla porównania L1: 4358 / 634, L3: 3817 / 880)
+          # Cała energia tej fazy ląduje w rejestrze wstecznym, więc to nie jest
+          # oddawanie nadwyżki, tylko zwykły pobór liczony w złą stronę.
+          # Docelowo obróć zacisk na L2; do tego czasu prostuje to invert + rejestr wsteczny.
           - name: Faza 2
             icon: plug
+            invert: true
             power: sensor.zamel_mew_01_0_electricity_meter_power_active_phase_2
             voltage: sensor.zamel_mew_01_0_electricity_meter_voltage_phase_2
             current: sensor.zamel_mew_01_0_electricity_meter_current_phase_2

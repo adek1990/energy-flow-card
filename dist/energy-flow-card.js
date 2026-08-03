@@ -52,12 +52,17 @@ const PL = {
 
   /* podsumowanie dnia */
   unmetered: 'Niezmierzone',
+  discovered: 'Nieprzypisane',
   unmetered_meta: 'reszta domu poza pomiarem',
   sum_produced: 'Wyprodukowano',
   sum_consumed: 'Zużył dom',
   sum_self_used: 'Zużyte z PV',
   sum_exported: 'Oddane do sieci',
   sum_imported: 'Pobrane z sieci',
+  sum_selfcons: 'Autokonsumpcja',
+  sum_selfcons_hint: 'ile produkcji zużyto u siebie',
+  sum_selfsuff: 'Samowystarczalność',
+  sum_selfsuff_hint: 'ile zużycia pokryła własna produkcja',
   sum_of_production: '{n}% produkcji',
   sum_of_consumption: '{n}% zużycia',
   sum_self_sufficiency: '{n}% samowystarczalności',
@@ -178,12 +183,17 @@ const EN = {
 
   /* daily summary */
   unmetered: 'Unmetered',
+  discovered: 'Unassigned',
   unmetered_meta: 'the rest of the house, not metered',
   sum_produced: 'Produced',
   sum_consumed: 'House used',
   sum_self_used: 'Used from solar',
   sum_exported: 'Exported',
   sum_imported: 'Imported',
+  sum_selfcons: 'Self-consumption',
+  sum_selfcons_hint: 'share of production used on site',
+  sum_selfsuff: 'Self-sufficiency',
+  sum_selfsuff_hint: 'share of usage covered by own production',
   sum_of_production: '{n}% of production',
   sum_of_consumption: '{n}% of consumption',
   sum_self_sufficiency: '{n}% self-sufficient',
@@ -259,7 +269,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.9.0';
+const EFC_VERSION = '1.10.0';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -832,6 +842,16 @@ class EnergyFlowCard extends HTMLElement {
       battery: null,
       house: null,
       groups: [],
+      auto_discover: raw.auto_discover
+        ? {
+            name: raw.auto_discover.name || null,
+            icon: raw.auto_discover.icon || 'plug',
+            expanded: !!raw.auto_discover.expanded,
+            limit: Number(raw.auto_discover.limit) || 40,
+            min_power: raw.auto_discover.min_power === undefined ? null : Number(raw.auto_discover.min_power),
+            exclude: asList(raw.auto_discover.exclude)
+          }
+        : null,
       layout: {
         mode: raw.layout && raw.layout.mode === 'free' ? 'free' : 'auto',
         edit: !!(raw.layout && raw.layout.edit),
@@ -927,6 +947,21 @@ class EnergyFlowCard extends HTMLElement {
       devices: (g.devices || []).map((d, j) => normDevice(d, 'd' + i + '_' + j, !!g.invert))
     }));
 
+    if (raw.auto_discover) {
+      c.groups.push({
+        id: '__discovered',
+        name: (raw.auto_discover.name || null),
+        icon: (raw.auto_discover.icon || 'plug'),
+        expanded: !!raw.auto_discover.expanded,
+        virtual: false,
+        discovered: true,
+        bidirectional: false,
+        energy_import: null,
+        energy_export: null,
+        devices: []
+      });
+    }
+
     /* reszta domu = moc domu − suma opomiarowanych grup; ma sens tylko wtedy,
        gdy moc domu pochodzi z bilansu albo osobnej encji, a nie z sumy tych grup */
     const um = raw.house && raw.house.unmetered;
@@ -945,6 +980,121 @@ class EnergyFlowCard extends HTMLElement {
   }
 
   /* ----------------------------------------------------------- odczyty */
+
+  /* ------------------------------------------------- autowyszukiwanie */
+
+  /* wszystkie encje użyte gdziekolwiek w konfiguracji — te pomijamy */
+  _assignedEntities() {
+    const c = this._cfg;
+    const out = new Set();
+    const add = (ref) => asList(ref).forEach((id) => out.add(id));
+    if (c.solar) {
+      add(c.solar.power);
+      add(c.solar.energy);
+      add(c.solar.voltage);
+      add(c.solar.current);
+      add(c.solar.frequency);
+      add(c.solar.status);
+      c.solar.strings.forEach((x) => {
+        add(x.power);
+        add(x.energy);
+        add(x.voltage);
+        add(x.current);
+      });
+    }
+    if (c.grid) {
+      add(c.grid.power);
+      add(c.grid.power_import);
+      add(c.grid.power_export);
+      add(c.grid.energy_import);
+      add(c.grid.energy_export);
+    }
+    if (c.battery) {
+      add(c.battery.power);
+      add(c.battery.soc);
+      add(c.battery.energy);
+    }
+    add(c.house.power);
+    add(c.house.energy);
+    add(c.house.self_sufficiency);
+    const walk = (d) => {
+      add(d.power);
+      add(d.energy);
+      add(d.voltage);
+      add(d.current);
+      d.children.forEach(walk);
+    };
+    c.groups.forEach((g) => {
+      add(g.energy_import);
+      add(g.energy_export);
+      g.devices.forEach(walk);
+    });
+    return out;
+  }
+
+  /* licznik energii pasujący do encji mocy — po wspólnym przedrostku id */
+  _matchEnergy(powerId) {
+    const stem = powerId.replace(/^sensor\./, '').replace(/_(power|moc)(_\d+)?$/, '');
+    const suffix = (powerId.match(/_power(_\d+)$/) || [])[1] || '';
+    const candidates = [
+      'sensor.' + stem + '_energy' + suffix + '_daily',
+      'sensor.' + stem + '_energy_daily' + suffix,
+      'sensor.' + stem + '_energy_today' + suffix,
+      'sensor.' + stem + '_daily_energy' + suffix,
+      'sensor.' + stem + '_energy' + suffix,
+      'sensor.' + stem + '_energia_dzis',
+      'sensor.' + stem + '_dzis'
+    ];
+    return candidates.find((id) => this._hass.states[id]) || null;
+  }
+
+  /* encje mocy nieprzypisane do żadnej grupy */
+  _discover() {
+    const cfg = this._cfg.auto_discover;
+    if (!cfg || !this._hass) return [];
+    const used = this._assignedEntities();
+    const skip = cfg.exclude;
+    const found = [];
+    Object.keys(this._hass.states).forEach((id) => {
+      if (!id.startsWith('sensor.') || used.has(id)) return;
+      const st = this._hass.states[id];
+      const a = st.attributes || {};
+      if (a.device_class !== 'power') return;
+      if (POWER_FACTOR[a.unit_of_measurement] === undefined) return;
+      const v = parseFloat(st.state);
+      if (Number.isNaN(v)) return;
+      if (cfg.min_power !== null && Math.abs(v * POWER_FACTOR[a.unit_of_measurement]) < cfg.min_power) return;
+      if (skip.some((p) => id.indexOf(p) >= 0)) return;
+      found.push({ id, name: a.friendly_name || id.slice(7).replace(/_/g, ' ') });
+    });
+    found.sort((x, y) => x.name.localeCompare(y.name, 'pl'));
+    return found.slice(0, cfg.limit);
+  }
+
+  /* podmienia zawartość grupy „Nieprzypisane" i przebudowuje DOM przy zmianie składu */
+  _syncDiscovered() {
+    const cfg = this._cfg.auto_discover;
+    if (!cfg) return false;
+    const found = this._discover();
+    const sig = found.map((x) => x.id).join(',');
+    if (sig === this._discSig) return false;
+    this._discSig = sig;
+    const group = this._cfg.groups.find((g) => g.id === '__discovered');
+    if (!group) return false;
+    group.devices = found.map((x, i) => ({
+      key: 'disc' + i,
+      name: x.name,
+      icon: 'plug',
+      power: x.id,
+      energy: this._matchEnergy(x.id),
+      voltage: null,
+      current: null,
+      invert: false,
+      expanded: false,
+      children: []
+    }));
+    return true;
+  }
 
   /* --------------------------------------------------------- język */
 
@@ -1032,7 +1182,9 @@ class EnergyFlowCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._cfg) return;
-    if (!this._built) this._build();
+    /* skład grupy z autowyszukiwania zależy od stanów, więc DOM trzeba odbudować */
+    const changed = this._syncDiscovered();
+    if (!this._built || changed) this._build();
     this._update();
     if (this._modal) this._syncModalHeader();
   }
@@ -1255,6 +1407,8 @@ class EnergyFlowCard extends HTMLElement {
     <div class="stat solar" data-stat="selfUsed"><div class="cap">${t('sum_self_used')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
     <div class="stat grid" data-stat="exported"><div class="cap">${t('sum_exported')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
     <div class="stat grid" data-stat="imported"><div class="cap">${t('sum_imported')}</div><div class="mono val">—</div><div class="mono sub"></div></div>
+    <div class="stat solar" data-stat="selfConsumption" data-unit="pct"><div class="cap">${t('sum_selfcons')}</div><div class="mono val">—</div><div class="mono sub">${t('sum_selfcons_hint')}</div></div>
+    <div class="stat cons" data-stat="selfSufficiency" data-unit="pct"><div class="cap">${t('sum_selfsuff')}</div><div class="mono val">—</div><div class="mono sub">${t('sum_selfsuff_hint')}</div></div>
   </div>
 
   ${
@@ -1436,6 +1590,13 @@ class EnergyFlowCard extends HTMLElement {
       um.power = Math.max(0, Math.round((house.power || 0) - consSum));
       um.energy = house.energy != null ? Math.max(0, house.energy - consNrg) : null;
       um.idle = um.power < this._cfg.idle_threshold;
+    }
+
+    /* wskaźnik przy domu ma pokazywać cały dzień — chwilowy spadał do 0% po zachodzie słońca */
+    const ownPct = this._numeric(this._cfg.house.self_sufficiency);
+    if (ownPct === null && house.energy > 0 && imp !== null) {
+      house.selfPct = Math.round((100 * Math.max(0, house.energy - imp)) / house.energy);
+      house.selfDaily = true;
     }
 
     house.summary = {
@@ -1627,7 +1788,7 @@ class EnergyFlowCard extends HTMLElement {
       const leaves = all.filter((d) => !d.hasChildren);
       return {
         id: g.id,
-        name: g.name || this._tx('group_n', { n: gi + 1 }),
+        name: g.name || this._tx(g.discovered ? 'discovered' : 'group_n', { n: gi + 1 }),
         icon: g.icon,
         devices,
         all,
@@ -2022,8 +2183,10 @@ class EnergyFlowCard extends HTMLElement {
       }
       el.classList.remove('hidden');
       shown++;
-      el.querySelector('.val').textContent = fmtKwh(v);
+      const pct = el.dataset.unit === 'pct';
+      el.querySelector('.val').textContent = pct ? nf(v, 0) + '%' : fmtKwh(v);
       const sub = el.querySelector('.sub');
+      if (pct) return;
       if (key === 'selfUsed' && s.selfConsumption !== null) {
         sub.textContent = t('sum_of_production', { n: s.selfConsumption });
       } else if (key === 'exported' && s.selfConsumption !== null) {

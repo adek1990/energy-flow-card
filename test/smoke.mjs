@@ -154,7 +154,8 @@ ok(m.strings[2].off === true, 'string 3 oznaczony jako niedostępny');
 ok(Math.abs(m.house.power - 2148) < 1, `moc domu = suma urządzeń: ${m.house.power} W (oczek. 2148)`);
 ok(Math.abs(m.grid.energyExport - 11.2) < 0.001, `Wh → kWh dla eksportu: ${m.grid.energyExport} (oczek. 11.2)`);
 ok(m.battery.soc === 78, `SOC: ${m.battery.soc}`);
-ok(m.house.selfPct === 0, `samowystarczalność przy poborze 6,2 kW > zużycie: ${m.house.selfPct}%`);
+// 13,69 kWh zużycia, z tego 3,40 kWh z sieci → 75% z własnych źródeł
+ok(m.house.selfPct === 75, `samowystarczalność liczona z energii dnia: ${m.house.selfPct}%`);
 ok(m.groups[0].active === 2, `aktywne urządzenia w grupie Klimat: ${m.groups[0].active} (oczek. 2)`);
 
 console.log('\n— teksty po polsku —');
@@ -517,6 +518,86 @@ ok(zg.leafCount === 3, `liczone są fazy: ${zg.leafCount}`);
 const zLink = [...cz.shadowRoot.querySelectorAll('#lyr-idle path')].find((p) => p.getAttribute('stroke-dasharray') === '3 6');
 ok(!!zLink, 'ujemny przepływ nie rysuje animowanej linii zużycia');
 ok(cz.shadowRoot.querySelectorAll('#lyr-act path').length === 0, 'brak animacji przy ujemnej sumie grupy');
+
+console.log('\n— samowystarczalność i autokonsumpcja z całego dnia —');
+// wieczór: PV już nie produkuje, ale dzień był słoneczny
+const hassNight = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.pv_now', 0, 'W'),
+    S('sensor.pv_day', 84.8, 'kWh'),
+    S('sensor.gimp_now', 1200, 'W'),
+    S('sensor.gimp_day', 17.44, 'kWh'),
+    S('sensor.gexp_day', 5, 'kWh')
+  ]),
+  callWS: async () => ({})
+};
+const cnight = document.createElement('energy-flow-card');
+cnight.setConfig({
+  type: 'custom:energy-flow-card',
+  solar: { power: 'sensor.pv_now', energy: 'sensor.pv_day', strings: [{ name: 'S', power: 'sensor.pv_now' }] },
+  grid: { power: 'sensor.gimp_now', energy_import: 'sensor.gimp_day', energy_export: 'sensor.gexp_day' },
+  house: { power: 'auto', energy: 'auto' },
+  groups: []
+});
+document.body.appendChild(cnight);
+cnight._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cnight.hass = hassNight;
+await new Promise((r) => setTimeout(r, 30));
+ok(cnight._m.house.selfPct === 82, `wieczorem wskaźnik liczy cały dzień, nie chwilę: ${cnight._m.house.selfPct}%`);
+ok(cnight._m.house.selfDaily === true, 'oznaczone jako wartość dobowa');
+const sbox = cnight.shadowRoot.getElementById('summary');
+const stt = (k) => sbox.querySelector(`[data-stat="${k}"]`);
+ok(stt('selfConsumption').querySelector('.val').textContent === '94%', `kafelek autokonsumpcji: ${stt('selfConsumption').querySelector('.val').textContent}`);
+ok(stt('selfSufficiency').querySelector('.val').textContent === '82%', `kafelek samowystarczalności: ${stt('selfSufficiency').querySelector('.val').textContent}`);
+ok(stt('selfConsumption').querySelector('.sub').textContent === 'ile produkcji zużyto u siebie', 'kafelek tłumaczy, co znaczy autokonsumpcja');
+ok(stt('consumed').querySelector('.val').textContent === '97,2 kWh', `dzienne zużycie domu: ${stt('consumed').querySelector('.val').textContent}`);
+
+console.log('\n— autowyszukiwanie nieprzypisanych odbiorników —');
+const P = (id, v, name) => [id, { entity_id: id, state: String(v), attributes: { unit_of_measurement: 'W', device_class: 'power', friendly_name: name } }];
+const hassDisc = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    P('sensor.pralka_power', 320, 'Pralka'),
+    P('sensor.zmywarka_power', 1100, 'Zmywarka'),
+    P('sensor.przypisany_power', 50, 'Już w grupie'),
+    P('sensor.grid_p2', 4000, 'Sieć'),
+    P('sensor.debug_power', 7, 'Debug'),
+    S('sensor.pralka_energy_daily', 0.85, 'kWh'),
+    S('sensor.temperatura', 21, '°C', { device_class: 'temperature' })
+  ]),
+  callWS: async () => ({})
+};
+const cd = document.createElement('energy-flow-card');
+cd.setConfig({
+  type: 'custom:energy-flow-card',
+  grid: { power: 'sensor.grid_p2' },
+  auto_discover: { name: 'Nieprzypisane', exclude: ['debug'] },
+  groups: [{ name: 'Znane', devices: [{ name: 'Znane', power: 'sensor.przypisany_power' }] }]
+});
+document.body.appendChild(cd);
+cd._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cd.hass = hassDisc;
+await new Promise((r) => setTimeout(r, 30));
+const dg = cd._m.groups.find((g) => g.id === '__discovered');
+const names = dg.devices.map((d) => d.name);
+ok(names.join(', ') === 'Pralka, Zmywarka', `znalezione nieprzypisane: ${names.join(', ')}`);
+ok(!names.includes('Już w grupie'), 'encja przypisana do grupy pominięta');
+ok(!names.includes('Sieć'), 'encja użyta w węźle sieci pominięta');
+ok(!names.includes('Debug'), 'wykluczenie po fragmencie id działa');
+ok(dg.power === 1420, `suma nieprzypisanych: ${dg.power} W`);
+ok(dg.devices[0].energyEntity === 'sensor.pralka_energy_daily', `dopasowany licznik energii: ${dg.devices[0].energyEntity}`);
+ok(dg.devices[1].energyEntity === null, 'brak licznika energii nie psuje wpisu');
+ok(!!cd.shadowRoot.querySelector('[data-group="__discovered"]'), 'grupa wyszukanych jest na karcie');
+// nowa encja pojawia się w HA → karta ją dołącza
+cd.hass = Object.assign({}, hassDisc, {
+  states: Object.assign({}, hassDisc.states, Object.fromEntries([P('sensor.suszarka_power', 900, 'Suszarka')]))
+});
+await new Promise((r) => setTimeout(r, 30));
+ok(
+  cd._m.groups.find((g) => g.id === '__discovered').devices.map((d) => d.name).includes('Suszarka'),
+  'nowa encja dołącza się bez zmiany konfiguracji'
+);
 
 console.log('\n— grupa dwukierunkowa (Altana jak dom) —');
 const hassBi = {
