@@ -54,6 +54,9 @@ export default {
   sum_of_consumption: '{n}% zużycia',
   sum_self_sufficiency: '{n}% samowystarczalności',
 
+  flow_in: 'pobiera',
+  flow_out: 'oddaje',
+
   /* legenda */
   legend_solar: 'Fotowoltaika',
   legend_grid: 'Sieć',

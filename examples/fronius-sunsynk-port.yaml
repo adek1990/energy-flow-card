@@ -57,17 +57,22 @@ grid:
   # Alternatywa (jedna encja ze znakiem, ujemna = oddawanie, bez `invert`):
   #   power: sensor.smart_meter_63a_realna_moc
   #
-  # Liczniki Energi są DZIENNE i rozbite na strefy taryfowe — karta sumuje listę.
-  # "consumed" = pobór z sieci, "produced" = oddanie do sieci.
-  energy_import:
-    - sensor.energa_my_meter_30985961_consumed_strefa_1_dzienna
-    - sensor.energa_my_meter_30985961_consumed_strefa_2_nocna
-  energy_export:
-    - sensor.energa_my_meter_30985961_produced_strefa_1_dzienna
-    - sensor.energa_my_meter_30985961_produced_strefa_2_nocna
-  # Liczniki Froniusa są od uruchomienia instalacji (38,66 / 35,21 MWh) — nie nadają się:
-  #   energy_import: sensor.smart_meter_63a_energia_rzeczywista_plus
-  #   energy_export: sensor.smart_meter_63a_energia_rzeczywista_minus
+  # DOBOWE liczniki z utility_meter (blok na końcu pliku) — to one dają
+  # „↓ dzisiaj / ↑ dzisiaj" przy strzałkach węzła sieci.
+  energy_import: sensor.grid_import_daily
+  energy_export: sensor.grid_export_daily
+  #
+  # Alternatywa: liczniki Energi, jeśli ich encje działają w Twojej instalacji.
+  # Karta zsumuje obie strefy taryfowe z listy:
+  #   energy_import:
+  #     - sensor.energa_my_meter_30985961_consumed_strefa_1_dzienna
+  #     - sensor.energa_my_meter_30985961_consumed_strefa_2_nocna
+  #   energy_export:
+  #     - sensor.energa_my_meter_30985961_produced_strefa_1_dzienna
+  #     - sensor.energa_my_meter_30985961_produced_strefa_2_nocna
+  #
+  # NIE używaj tych — liczą od uruchomienia instalacji (38,66 / 35,21 MWh):
+  #   sensor.smart_meter_63a_energia_rzeczywista_plus / _minus
 
 house:
   name: Dom
@@ -272,6 +277,11 @@ groups:
   - name: Altana
     icon: server
     expanded: true
+    # Licznik mierzy w obie strony, więc grupa dostaje bilans jak węzeł sieci,
+    # a linia do domu odwraca kierunek, gdy altana oddaje nadwyżkę.
+    bidirectional: true
+    energy_import: sensor.zamel_mew_01_0_electricity_meter_total_forward_active_energy
+    energy_export: sensor.zamel_mew_01_0_electricity_meter_total_reverse_active_energy
     devices:
       - name: Licznik Zamel MEW-01
         icon: server
@@ -298,6 +308,22 @@ groups:
 grid_options:
   columns: full
   rows: auto
+
+# =============================================================================
+# DOBOWE LICZNIKI SIECI — bez nich strzałki przy węźle sieci pokazują „—".
+# Źródłem są liczniki Froniusa (od uruchomienia instalacji), a utility_meter
+# odcina z nich przyrost dobowy. configuration.yaml:
+#
+# utility_meter:
+#   grid_import_daily:
+#     source: sensor.smart_meter_63a_energia_rzeczywista_plus
+#     cycle: daily
+#   grid_export_daily:
+#     source: sensor.smart_meter_63a_energia_rzeczywista_minus
+#     cycle: daily
+#
+# Po restarcie HA liczniki startują od zera i napełniają się w ciągu doby.
+# =============================================================================
 
 # =============================================================================
 # LICZNIK ALTANY — liczniki Zamela są od uruchomienia (8175 / 8457 kWh),

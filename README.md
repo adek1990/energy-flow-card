@@ -89,7 +89,7 @@ groups:
 | `legend`         | bool    | `true`                           | Legenda kolorów pod kartą |
 | `history`        | bool    | `true`                           | Okno historii po kliknięciu węzła (`false` → standardowe „więcej informacji") |
 | `idle_threshold` | liczba  | `15`                             | Próg w W, poniżej którego węzeł i linia są traktowane jako bezczynne |
-| `fonts`          | bool    | `true`                           | Doładowanie IBM Plex Sans/Mono z Google Fonts |
+| `summary`        | bool    | `true`                           | Pasek podsumowania dnia pod kartą |
 
 ### `solar`
 
@@ -171,6 +171,9 @@ groups:
         energy: sensor.fridge_energy_today
 ```
 
+Urządzenie przyjmuje też `voltage` i `current` — pokazują się obok mocy jako
+`243,1 V · 2,98 A`, a bez nich kolumna w ogóle się nie pojawia.
+
 Encja `energy` jest opcjonalna — bez niej urządzenie pokazuje `—` w kolumnie energii, a słupki
 w oknie historii są liczone przez całkowanie mocy. Urządzenie z samą encją `energy` nie jest
 traktowane jako awaria: pokazuje `—` w kolumnie mocy i nie jest wygaszane.
@@ -242,6 +245,13 @@ w nagłówku grupy liczy kanały, nie moduły, więc suma grupy nigdy nie jest p
 wiersza modułu rozwija listę, kliknięcie kanału otwiera jego historię — okno historii modułu
 sumuje encje wszystkich kanałów.
 
+### Grupa dwukierunkowa
+
+Grupa z własnym licznikiem dwukierunkowym (np. podlicznik budynku gospodarczego) zachowuje się jak
+węzeł sieci: pokazuje bilans , dopisuje / w opisie, a linia do
+domu odwraca kierunek i zmienia kolor na produkcyjny, gdy grupa oddaje energię.
+
+\
 ### Listy encji
 
 Każde pole encji (`power`, `energy`, `energy_import`, …) przyjmuje pojedyncze id albo listę — wtedy

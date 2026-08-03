@@ -54,6 +54,9 @@ export default {
   sum_of_consumption: '{n}% of consumption',
   sum_self_sufficiency: '{n}% self-sufficient',
 
+  flow_in: 'drawing',
+  flow_out: 'returning',
+
   /* legend */
   legend_solar: 'Solar',
   legend_grid: 'Grid',

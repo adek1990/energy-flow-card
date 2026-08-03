@@ -518,6 +518,65 @@ const zLink = [...cz.shadowRoot.querySelectorAll('#lyr-idle path')].find((p) => 
 ok(!!zLink, 'ujemny przepływ nie rysuje animowanej linii zużycia');
 ok(cz.shadowRoot.querySelectorAll('#lyr-act path').length === 0, 'brak animacji przy ujemnej sumie grupy');
 
+console.log('\n— grupa dwukierunkowa (Altana jak dom) —');
+const hassBi = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.bf1', 715.25, 'W'),
+    S('sensor.bf2', -2249.47, 'W'),
+    S('sensor.bf3', 3.23, 'W'),
+    S('sensor.b_imp', 8175.79, 'kWh'),
+    S('sensor.b_exp', 8457.14, 'kWh'),
+    S('sensor.zwykly', 500, 'W')
+  ]),
+  callWS: async () => ({})
+};
+const cbi = document.createElement('energy-flow-card');
+cbi.setConfig({
+  type: 'custom:energy-flow-card',
+  groups: [
+    {
+      name: 'Altana',
+      icon: 'server',
+      expanded: true,
+      bidirectional: true,
+      energy_import: 'sensor.b_imp',
+      energy_export: 'sensor.b_exp',
+      devices: [
+        { name: 'Faza 1', power: 'sensor.bf1' },
+        { name: 'Faza 2', power: 'sensor.bf2' },
+        { name: 'Faza 3', power: 'sensor.bf3' }
+      ]
+    },
+    { name: 'Zwykła', devices: [{ name: 'X', power: 'sensor.zwykly' }] }
+  ]
+});
+document.body.appendChild(cbi);
+cbi._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cbi.hass = hassBi;
+await new Promise((r) => setTimeout(r, 30));
+const bg = cbi._m.groups[0];
+ok(bg.bidir === true, 'grupa oznaczona jako dwukierunkowa');
+ok(bg.imp === 8175.79 && bg.exp === 8457.14, `własne liczniki grupy: ↓ ${bg.imp} ↑ ${bg.exp}`);
+const flowEl = cbi.shadowRoot.querySelector(`[data-group="${cbi._m.groups[0].id}"] [data-f="flow"]`);
+ok(!!flowEl && !flowEl.classList.contains('hidden'), 'kafelek pokazuje bilans ze strzałkami');
+ok(flowEl.textContent.includes('↓ 8,18 MWh') && flowEl.textContent.includes('↑ 8,46 MWh'), `bilans grupy: ${flowEl.textContent}`);
+ok(
+  cbi.shadowRoot.querySelector(`[data-group="${cbi._m.groups[0].id}"] [data-f="meta"]`).textContent.includes('oddaje'),
+  'meta mówi, że grupa oddaje energię'
+);
+ok(
+  cbi.shadowRoot.querySelector(`[data-group="${cbi._m.groups[1].id}"] [data-f="flow"]`).classList.contains('hidden'),
+  'zwykła grupa nie dostaje bilansu'
+);
+// kierunek linii: przy oddawaniu strzałka wraca do domu
+const defs = cbi._linkDefs();
+const altLink = defs.find((l) => l.a === 'grp-' + cbi._m.groups[0].id || l.b === 'grp-' + cbi._m.groups[0].id);
+ok(altLink.a === 'grp-' + cbi._m.groups[0].id && altLink.b === 'hub', 'oddająca grupa rysuje linię w stronę domu');
+ok(altLink.c === 'solar' && altLink.p > 0, `linia oddawania w kolorze produkcji: ${altLink.c}, ${Math.round(altLink.p)} W`);
+const normLink = defs.find((l) => l.b === 'grp-' + cbi._m.groups[1].id);
+ok(normLink.a === 'hub' && normLink.c === 'cons', 'zwykła grupa nadal od domu do odbiornika');
+
 console.log('\n— napięcie i prąd przy odbiornikach —');
 const hassVA = {
   themes: { darkMode: true },

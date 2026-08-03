@@ -835,7 +835,32 @@ class EnergyFlowCardEditor extends HTMLElement {
             this._emit();
           })
         );
+        sw.appendChild(
+          this._switch('Licznik dwukierunkowy', !!(g.bidirectional || g.energy_import), (v) => {
+            g.bidirectional = v;
+            this._emit();
+            this._render();
+          })
+        );
         card.appendChild(sw);
+
+        if (g.bidirectional || g.energy_import || g.energy_export) {
+          card.appendChild(
+            this._group(
+              this._entity('Energia pobrana', g.energy_import, (v) => {
+                g.energy_import = v;
+                this._emit();
+              }),
+              this._entity('Energia oddana', g.energy_export, (v) => {
+                g.energy_export = v;
+                this._emit();
+              })
+            )
+          );
+          card.appendChild(
+            this._hint('Grupa dostaje bilans jak węzeł sieci, a linia odwraca się, gdy oddaje energię.')
+          );
+        }
 
         const box = document.createElement('div');
         box.className = 'kids';

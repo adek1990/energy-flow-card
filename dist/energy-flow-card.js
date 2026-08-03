@@ -7,7 +7,7 @@
 import PL from './lang-pl.js';
 import EN from './lang-en.js';
 
-const EFC_VERSION = '1.6.1';
+const EFC_VERSION = '1.8.0';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -345,6 +345,8 @@ const STYLES = `
 .grp-txt { min-width:0;flex:1; }
 .grp-lbl { font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .grp-meta { font-size:10px;color:var(--mut);margin-top:3px; }
+.grp-flow { font-size:10px;color:var(--mut);margin-top:3px;white-space:nowrap; }
+.grp-flow .out { color:var(--solar); }
 .grp-pwr {
   font-size:12px;font-weight:600;color:var(--cons);border:1px solid color-mix(in oklab,var(--cons) 45%,transparent);
   background:color-mix(in oklab,var(--cons) 11%,transparent);border-radius:7px;padding:3px 6px;white-space:nowrap;
@@ -666,6 +668,10 @@ class EnergyFlowCard extends HTMLElement {
       icon: g.icon || 'plug',
       expanded: !!g.expanded,
       virtual: false,
+      /* grupa dwukierunkowa: własny licznik pobrania i oddania, jak węzeł sieci */
+      bidirectional: !!(g.bidirectional || g.energy_import || g.energy_export),
+      energy_import: g.energy_import || null,
+      energy_export: g.energy_export || null,
       devices: (g.devices || []).map((d, j) => normDevice(d, 'd' + i + '_' + j, !!g.invert))
     }));
 
@@ -882,6 +888,7 @@ class EnergyFlowCard extends HTMLElement {
           <div class="grp-txt">
             <div class="grp-lbl">${esc(grp.name || t('group_n', { n: gi + 1 }))}</div>
             <div class="mono grp-meta" data-f="meta">—</div>
+            <div class="mono grp-flow hidden" data-f="flow"></div>
           </div>
           <span class="mono grp-pwr" data-f="pwr">—</span>
           ${grp.virtual ? '' : '<span class="grp-chev" data-f="chev">▸</span>'}
@@ -1377,9 +1384,14 @@ class EnergyFlowCard extends HTMLElement {
         energy: nrg,
         active,
         off: devices.length > 0 && devices.every((d) => d.off),
-        idle: sum < idle,
+        idle: Math.abs(sum) < idle,
+        bidir: g.bidirectional,
+        imp: g.energy_import ? this._energy(g.energy_import).v : null,
+        exp: g.energy_export ? this._energy(g.energy_export).v : null,
         powerEntities: devices.reduce((a, d) => a.concat(d.powerEntities), []),
-        energyEntities: devices.reduce((a, d) => a.concat(d.energyEntities), [])
+        energyEntities: g.energy_import
+          ? asList(g.energy_import).concat(asList(g.energy_export))
+          : devices.reduce((a, d) => a.concat(d.energyEntities), [])
       };
     });
 
@@ -1644,9 +1656,23 @@ class EnergyFlowCard extends HTMLElement {
           ' ' +
           this._plural(g.active, 'plural_active') +
           ' · ' +
-          fmtKwh(g.energy)
+          fmtKwh(g.energy) +
+          (g.bidir ? ' · ' + t(g.power < 0 ? 'flow_out' : 'flow_in') : '')
       );
       flags(el, g.off, !g.off && g.idle);
+
+      /* bilans grupy dwukierunkowej — jak przy węźle sieci */
+      const flow = el.querySelector('[data-f="flow"]');
+      if (flow) {
+        if (!g.bidir || (g.imp === null && g.exp === null)) {
+          flow.classList.add('hidden');
+        } else {
+          flow.classList.remove('hidden');
+          flow.innerHTML =
+            '↓ ' + esc(fmtKwh(g.imp)) + '   <span class="out">↑ ' + esc(fmtKwh(g.exp)) + '</span>';
+        }
+      }
+
       nodes['grp-' + g.id] = {
         label: g.name + ' · ' + g.leafCount + ' ' + t('devices_short'),
         entityId: t('entities_in_group', { n: g.powerEntities.length || g.energyEntities.length }),
@@ -2118,7 +2144,11 @@ class EnergyFlowCard extends HTMLElement {
       if (p >= 0) out.push({ a: 'hub', b: 'batt', p, c: 'batt', dead: m.battery.off });
       else out.push({ a: 'batt', b: 'hub', p: -p, c: 'batt' });
     }
-    m.groups.forEach((g) => out.push({ a: 'hub', b: 'grp-' + g.id, p: g.power, c: 'cons', dead: g.off }));
+    m.groups.forEach((g) => {
+      /* grupa oddająca energię rysuje się jak eksport do sieci — w stronę domu */
+      if (g.bidir && g.power < 0) out.push({ a: 'grp-' + g.id, b: 'hub', p: -g.power, c: 'solar' });
+      else out.push({ a: 'hub', b: 'grp-' + g.id, p: g.power, c: 'cons', dead: g.off });
+    });
     return out;
   }
 
