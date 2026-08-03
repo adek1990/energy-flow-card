@@ -589,7 +589,8 @@ ok(dg.power === 1420, `suma nieprzypisanych: ${dg.power} W`);
 ok(dg.devices[0].energyEntity === 'sensor.pralka_energy_daily', `dopasowany licznik energii: ${dg.devices[0].energyEntity}`);
 ok(dg.devices[1].energyEntity === null, 'brak licznika energii nie psuje wpisu');
 ok(!!cd.shadowRoot.querySelector('[data-group="__discovered"]'), 'grupa wyszukanych jest na karcie');
-// nowa encja pojawia się w HA → karta ją dołącza
+// nowa encja pojawia się w HA → karta ją dołącza (po upływie okna skanowania)
+cd._discAt = 0;
 cd.hass = Object.assign({}, hassDisc, {
   states: Object.assign({}, hassDisc.states, Object.fromEntries([P('sensor.suszarka_power', 900, 'Suszarka')]))
 });
@@ -598,6 +599,64 @@ ok(
   cd._m.groups.find((g) => g.id === '__discovered').devices.map((d) => d.name).includes('Suszarka'),
   'nowa encja dołącza się bez zmiany konfiguracji'
 );
+
+console.log('\n— przebudowa nie psuje trybu mobilnego ani wydajności —');
+// telefon: karta w trybie pionowym, potem dochodzi nowa encja z autowyszukiwania
+const cm = document.createElement('energy-flow-card');
+cm.setConfig({
+  type: 'custom:energy-flow-card',
+  solar: { strings: [{ name: 'S', power: 'sensor.pralka_power' }] },
+  auto_discover: { name: 'Nieprzypisane' },
+  groups: [{ name: 'Znane', devices: [{ name: 'Z', power: 'sensor.przypisany_power' }] }]
+});
+document.body.appendChild(cm);
+cm._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 900 });
+cm.hass = hassDisc;
+await new Promise((r) => setTimeout(r, 40));
+ok(cm._narrow === true, 'karta w trybie pionowym');
+ok(cm._q.grid.classList.contains('narrow'), 'siatka ma klasę narrow');
+
+let scans = 0;
+const realDiscover = cm._discover.bind(cm);
+cm._discover = function () {
+  scans++;
+  return realDiscover();
+};
+// dziesięć aktualizacji stanów pod rząd, jak w prawdziwym HA
+for (let i = 0; i < 10; i++) {
+  cm.hass = Object.assign({}, hassDisc, {
+    states: Object.assign({}, hassDisc.states, Object.fromEntries([P('sensor.pralka_power', 300 + i, 'Pralka')]))
+  });
+}
+await new Promise((r) => setTimeout(r, 40));
+ok(scans === 0, `skan encji nie powtarza się przy każdej aktualizacji: ${scans} razy`);
+ok(cm._q.grid.classList.contains('narrow'), 'tryb pionowy przeżywa aktualizacje');
+
+// wymuszona przebudowa (nowa encja) nie może zgubić układu mobilnego
+cm._discAt = 0;
+cm.hass = Object.assign({}, hassDisc, {
+  states: Object.assign({}, hassDisc.states, Object.fromEntries([P('sensor.nowa_power', 500, 'Nowa')]))
+});
+await new Promise((r) => setTimeout(r, 40));
+ok(
+  cm._m.groups.find((g) => g.id === '__discovered').devices.some((d) => d.name === 'Nowa'),
+  'nowa encja trafia na listę po odświeżeniu skanu'
+);
+ok(cm._q.grid.classList.contains('narrow'), 'po przebudowie DOM tryb pionowy wraca');
+ok(cm._q.stringlist.classList.contains('hidden') === false, 'zwijana lista falowników nadal aktywna');
+ok(cm._q.groups.style.getPropertyValue('--colmin') === '150px', `kolumny mobilne zachowane: ${cm._q.groups.style.getPropertyValue('--colmin')}`);
+ok(cm.shadowRoot.querySelectorAll('#lyr-idle path').length > 0, 'łączniki przeliczone po przebudowie');
+
+// encja chwilowo niedostępna nie może wywoływać przebudowy
+cm._discAt = 0;
+const beforeSig = cm._discSig;
+cm.hass = Object.assign({}, hassDisc, {
+  states: Object.assign({}, hassDisc.states, Object.fromEntries([P('sensor.nowa_power', 500, 'Nowa')]), {
+    'sensor.pralka_power': { entity_id: 'sensor.pralka_power', state: 'unavailable', attributes: { device_class: 'power', unit_of_measurement: 'W', friendly_name: 'Pralka' } }
+  })
+});
+await new Promise((r) => setTimeout(r, 40));
+ok(cm._discSig === beforeSig, 'chwilowa niedostępność nie przebudowuje karty');
 
 console.log('\n— grupa dwukierunkowa (Altana jak dom) —');
 const hassBi = {

@@ -269,7 +269,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.10.0';
+const EFC_VERSION = '1.10.1';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -1025,6 +1025,9 @@ class EnergyFlowCard extends HTMLElement {
       d.children.forEach(walk);
     };
     c.groups.forEach((g) => {
+      /* pomijamy grupę z autowyszukiwania — inaczej przy kolejnym skanie jej własne
+         znaleziska liczyłyby się jako już przypisane i znikałyby z listy */
+      if (g.discovered) return;
       add(g.energy_import);
       add(g.energy_export);
       g.devices.forEach(walk);
@@ -1048,12 +1051,15 @@ class EnergyFlowCard extends HTMLElement {
     return candidates.find((id) => this._hass.states[id]) || null;
   }
 
-  /* encje mocy nieprzypisane do żadnej grupy */
+  /* encje mocy nieprzypisane do żadnej grupy.
+     Skład jest „lepki": raz znaleziona encja zostaje, dopóki istnieje w Home Assistancie.
+     Bez tego chwilowa niedostępność albo wahanie wokół progu przebudowywałyby kartę bez końca. */
   _discover() {
     const cfg = this._cfg.auto_discover;
     if (!cfg || !this._hass) return [];
     const used = this._assignedEntities();
     const skip = cfg.exclude;
+    this._discKept = this._discKept || new Set();
     const found = [];
     Object.keys(this._hass.states).forEach((id) => {
       if (!id.startsWith('sensor.') || used.has(id)) return;
@@ -1061,10 +1067,13 @@ class EnergyFlowCard extends HTMLElement {
       const a = st.attributes || {};
       if (a.device_class !== 'power') return;
       if (POWER_FACTOR[a.unit_of_measurement] === undefined) return;
-      const v = parseFloat(st.state);
-      if (Number.isNaN(v)) return;
-      if (cfg.min_power !== null && Math.abs(v * POWER_FACTOR[a.unit_of_measurement]) < cfg.min_power) return;
       if (skip.some((p) => id.indexOf(p) >= 0)) return;
+      if (cfg.min_power !== null && !this._discKept.has(id)) {
+        /* próg decyduje tylko o pierwszym wejściu na listę */
+        const v = parseFloat(st.state);
+        if (Number.isNaN(v) || Math.abs(v * POWER_FACTOR[a.unit_of_measurement]) < cfg.min_power) return;
+      }
+      this._discKept.add(id);
       found.push({ id, name: a.friendly_name || id.slice(7).replace(/_/g, ' ') });
     });
     found.sort((x, y) => x.name.localeCompare(y.name, 'pl'));
@@ -1072,9 +1081,14 @@ class EnergyFlowCard extends HTMLElement {
   }
 
   /* podmienia zawartość grupy „Nieprzypisane" i przebudowuje DOM przy zmianie składu */
-  _syncDiscovered() {
+  _syncDiscovered(force) {
     const cfg = this._cfg.auto_discover;
     if (!cfg) return false;
+    /* skanowanie wszystkich stanów przy każdej aktualizacji zabijało telefon —
+       wystarczy co 20 s, bo lista urządzeń zmienia się rzadko */
+    const now = Date.now();
+    if (!force && this._discAt && now - this._discAt < 20000) return false;
+    this._discAt = now;
     const found = this._discover();
     const sig = found.map((x) => x.id).join(',');
     if (sig === this._discSig) return false;
@@ -1183,7 +1197,7 @@ class EnergyFlowCard extends HTMLElement {
     this._hass = hass;
     if (!this._cfg) return;
     /* skład grupy z autowyszukiwania zależy od stanów, więc DOM trzeba odbudować */
-    const changed = this._syncDiscovered();
+    const changed = this._syncDiscovered(!this._built);
     if (!this._built || changed) this._build();
     this._update();
     if (this._modal) this._syncModalHeader();
@@ -1436,10 +1450,15 @@ class EnergyFlowCard extends HTMLElement {
 
     this._built = true;
     this._builtLang = this._dict();
+    this._sig = '';
     this._cacheRefs();
     this._bindEvents();
     this._bindDrag();
     this._bindLayoutButtons();
+
+    /* świeży DOM nie zna bieżącej szerokości ani układu — przywracamy je od razu */
+    this._applyBreakpoint();
+    this._applyLayout();
 
     const card = root.getElementById('card');
     if (this._ro) this._ro.disconnect();
@@ -2571,6 +2590,20 @@ class EnergyFlowCard extends HTMLElement {
     return out;
   }
 
+  /* klasy zależne od szerokości — wołane też po przebudowie DOM,
+     inaczej świeży DOM zostawał bez trybu pionowego i układ się rozjeżdżał */
+  _applyBreakpoint() {
+    if (!this._q || !this._q.grid) return;
+    const narrow = !!this._narrow;
+    this._q.grid.classList.toggle('narrow', narrow);
+    if (this._cfg.solar && this._q.strings && this._q.stringlist) {
+      this._q.strings.classList.toggle('hidden', narrow);
+      this._q.stringlist.classList.toggle('hidden', !narrow);
+    }
+    const total = this._m ? this._m.groups.reduce((t, g) => t + g.leafCount, 0) : 0;
+    this._q.groups.style.setProperty('--colmin', (narrow ? 150 : total > 18 ? 190 : 215) + 'px');
+  }
+
   _measure() {
     if (!this._built || !this._q || !this._q.card || !this._m) return;
     const width = this._q.card.getBoundingClientRect().width;
@@ -2579,13 +2612,7 @@ class EnergyFlowCard extends HTMLElement {
     const narrow = width < 720;
     if (narrow !== this._narrow) {
       this._narrow = narrow;
-      this._q.grid.classList.toggle('narrow', narrow);
-      if (this._cfg.solar) {
-        this._q.strings.classList.toggle('hidden', narrow);
-        this._q.stringlist.classList.toggle('hidden', !narrow);
-      }
-      const total = this._m ? this._m.groups.reduce((t, g) => t + g.leafCount, 0) : 0;
-      this._q.groups.style.setProperty('--colmin', (narrow ? 150 : total > 18 ? 190 : 215) + 'px');
+      this._applyBreakpoint();
       /* tryb pionowy zawsze wygrywa z układem swobodnym */
       this._applyLayout();
       requestAnimationFrame(() => this._measure());
