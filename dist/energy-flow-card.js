@@ -4,10 +4,262 @@
  * Licencja: MIT
  */
 
-import PL from './lang-pl.js';
-import EN from './lang-en.js';
+/* Słowniki są wbudowane w plik karty celowo: osobne pliki bywają cache'owane
+   niezależnie od karty, przez co po aktualizacji wychodziły surowe klucze.
+   Nowy język = kopia poniższego obiektu + wpis w mapie LANGS. */
+const PL = {
+  locale: 'pl-PL',
 
-const EFC_VERSION = '1.8.0';
+  /* domyślne nazwy węzłów */
+  solar_total: 'Fotowoltaika łącznie',
+  house: 'Dom',
+  grid: 'Sieć',
+  battery: 'Akumulator',
+  group_n: 'Grupa {n}',
+  string_n: 'String {n}',
+  device: 'Urządzenie',
+
+  /* stany */
+  unavailable: 'niedostępny',
+  unavailable_f: 'niedostępna',
+  no_data: 'brak',
+  no_entity: 'brak encji',
+
+  /* węzły */
+  grid_import: 'Pobór z sieci',
+  grid_export: 'Oddanie do sieci',
+  battery_charging: 'Ładowanie akumulatora',
+  battery_discharging: 'Rozładowanie akumulatora',
+  self_sufficient: '{n}% samowystarczalności',
+  consumers: 'Odbiorniki',
+  expand_all: 'Rozwiń wszystko',
+  collapse_all: 'Zwiń wszystko',
+  tap_to_expand: 'dotknij, aby rozwinąć',
+  sum_suffix: 'suma',
+  entities_sum: '{n} encji · suma',
+  entities_in_group: '{n} encji w grupie',
+  entities_channels: '{n} encji · suma kanałów',
+  entities_strings: '{n} encji · suma stringów',
+  entities_consumers: '{n} encji · suma odbiorników',
+  devices_short: 'urz.',
+
+  /* liczebniki: [1, 2-4, 5+] */
+  plural_device: ['urządzenie', 'urządzenia', 'urządzeń'],
+  plural_active: ['aktywne', 'aktywne', 'aktywnych'],
+  plural_group: ['grupie', 'grupach', 'grupach'],
+  plural_string: ['string falownika', 'stringi falownika', 'stringów falownika'],
+  in_groups: 'w',
+
+  /* podsumowanie dnia */
+  unmetered: 'Niezmierzone',
+  unmetered_meta: 'reszta domu poza pomiarem',
+  sum_produced: 'Wyprodukowano',
+  sum_consumed: 'Zużył dom',
+  sum_self_used: 'Zużyte z PV',
+  sum_exported: 'Oddane do sieci',
+  sum_imported: 'Pobrane z sieci',
+  sum_of_production: '{n}% produkcji',
+  sum_of_consumption: '{n}% zużycia',
+  sum_self_sufficiency: '{n}% samowystarczalności',
+
+  flow_in: 'pobiera',
+  flow_out: 'oddaje',
+
+  /* legenda */
+  legend_solar: 'Fotowoltaika',
+  legend_grid: 'Sieć',
+  legend_consumption: 'Zużycie',
+  legend_battery: 'Akumulator',
+  legend_note: 'grubość linii ∝ moc · prędkość animacji ∝ moc · kropkowana = bezczynna',
+
+  /* dymek */
+  tip_now: 'teraz',
+  tip_today: 'dzisiaj',
+
+  /* historia */
+  range_today: 'Dziś',
+  range_yesterday: 'Wczoraj',
+  range_7d: '7 dni',
+  range_30d: '30 dni',
+  range_custom: 'Zakres',
+  now: 'teraz',
+  pick_range: 'wybierz datę początkową i końcową',
+  pick_start: 'wybierz datę początkową',
+  pick_end: 'wybierz datę końcową',
+  range_set: 'zakres ustawiony · kliknij dzień, aby zacząć od nowa',
+  loading: 'Pobieranie historii z rejestratora…',
+  load_failed: 'Nie udało się pobrać historii',
+  no_history: 'Brak historii dla tego zakresu',
+  no_history_pick: 'Wybierz datę początkową i końcową, aby wczytać statystyki.',
+  no_history_off: 'Encja jest niedostępna — rejestrator nie ma statystyk dla wybranego okresu.',
+  no_history_empty: 'Rejestrator nie zwrócił danych dla wybranych encji.',
+  chart_power: 'Moc',
+  chart_energy: 'Energia',
+  peak: 'szczyt',
+  average: 'średnio',
+  hourly: 'godzinowo',
+  daily: 'dobowo',
+  total: 'łącznie',
+  today_suffix: 'dzisiaj',
+  months: [
+    'styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec',
+    'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'
+  ],
+  dow: ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'ndz'],
+
+  /* nawigacja po czasie */
+  win_from: 'od',
+  win_to: 'do',
+  win_prev: 'Przesuń wstecz',
+  win_next: 'Przesuń naprzód',
+  win_zoom_in: 'Zawęź zakres',
+  win_zoom_out: 'Poszerz zakres',
+  win_min: 'min',
+  win_hours: 'godz.',
+  win_days: 'dni',
+
+  /* układ */
+  layout: '⠿ Układ',
+  layout_done: '✓ Gotowe',
+  layout_copy: 'Kopiuj YAML',
+  layout_reset: 'Reset',
+  layout_hint: 'Przeciągnij węzły. Układ zapisuje się w tej przeglądarce.',
+  layout_copied: 'Skopiowano — wklej do konfiguracji karty, aby utrwalić na stałe.',
+  layout_clipboard_fail: 'Schowek niedostępny — układ wypisany w konsoli (F12).',
+  layout_restored: 'Przywrócono układ z konfiguracji karty.',
+
+  /* diagnostyka */
+  missing_warning:
+    'Te encje nie istnieją w Home Assistancie (sprawdź id w Narzędzia deweloperskie → Stany):'
+};
+
+const EN = {
+  locale: 'en-GB',
+
+  /* default node names */
+  solar_total: 'Solar total',
+  house: 'House',
+  grid: 'Grid',
+  battery: 'Battery',
+  group_n: 'Group {n}',
+  string_n: 'String {n}',
+  device: 'Device',
+
+  /* states */
+  unavailable: 'unavailable',
+  unavailable_f: 'unavailable',
+  no_data: 'n/a',
+  no_entity: 'no entity',
+
+  /* nodes */
+  grid_import: 'Grid import',
+  grid_export: 'Grid export',
+  battery_charging: 'Battery charging',
+  battery_discharging: 'Battery discharging',
+  self_sufficient: '{n}% self-sufficient',
+  consumers: 'Consumers',
+  expand_all: 'Expand all',
+  collapse_all: 'Collapse all',
+  tap_to_expand: 'tap to expand',
+  sum_suffix: 'total',
+  entities_sum: '{n} entities · sum',
+  entities_in_group: '{n} entities in group',
+  entities_channels: '{n} entities · channel sum',
+  entities_strings: '{n} entities · string sum',
+  entities_consumers: '{n} entities · consumer sum',
+  devices_short: 'dev.',
+
+  /* plurals: [one, few, many] — English uses one/other, so few = many */
+  plural_device: ['device', 'devices', 'devices'],
+  plural_active: ['active', 'active', 'active'],
+  plural_group: ['group', 'groups', 'groups'],
+  plural_string: ['inverter string', 'inverter strings', 'inverter strings'],
+  in_groups: 'in',
+
+  /* daily summary */
+  unmetered: 'Unmetered',
+  unmetered_meta: 'the rest of the house, not metered',
+  sum_produced: 'Produced',
+  sum_consumed: 'House used',
+  sum_self_used: 'Used from solar',
+  sum_exported: 'Exported',
+  sum_imported: 'Imported',
+  sum_of_production: '{n}% of production',
+  sum_of_consumption: '{n}% of consumption',
+  sum_self_sufficiency: '{n}% self-sufficient',
+
+  flow_in: 'drawing',
+  flow_out: 'returning',
+
+  /* legend */
+  legend_solar: 'Solar',
+  legend_grid: 'Grid',
+  legend_consumption: 'Consumption',
+  legend_battery: 'Battery',
+  legend_note: 'line width ∝ power · dash speed ∝ power · dotted = idle',
+
+  /* tooltip */
+  tip_now: 'now',
+  tip_today: 'today',
+
+  /* history */
+  range_today: 'Today',
+  range_yesterday: 'Yesterday',
+  range_7d: '7 days',
+  range_30d: '30 days',
+  range_custom: 'Custom',
+  now: 'now',
+  pick_range: 'pick a start and end date',
+  pick_start: 'select start date',
+  pick_end: 'select end date',
+  range_set: 'range set · click a day to restart',
+  loading: 'Fetching recorder history…',
+  load_failed: 'Could not load history',
+  no_history: 'No history for this range',
+  no_history_pick: 'Pick both a start and an end date to load statistics.',
+  no_history_off: 'This entity is unavailable — the recorder has no statistics for the selected period.',
+  no_history_empty: 'The recorder returned no data for the selected entities.',
+  chart_power: 'Power',
+  chart_energy: 'Energy',
+  peak: 'peak',
+  average: 'avg',
+  hourly: 'hourly',
+  daily: 'daily',
+  total: 'total',
+  today_suffix: 'today',
+  months: [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ],
+  dow: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+
+  /* time navigation */
+  win_from: 'from',
+  win_to: 'to',
+  win_prev: 'Shift back',
+  win_next: 'Shift forward',
+  win_zoom_in: 'Zoom in',
+  win_zoom_out: 'Zoom out',
+  win_min: 'min',
+  win_hours: 'h',
+  win_days: 'days',
+
+  /* layout */
+  layout: '⠿ Layout',
+  layout_done: '✓ Done',
+  layout_copy: 'Copy YAML',
+  layout_reset: 'Reset',
+  layout_hint: 'Drag the nodes. The layout is saved in this browser.',
+  layout_copied: 'Copied — paste into the card config to make it permanent.',
+  layout_clipboard_fail: 'Clipboard unavailable — layout printed to the console (F12).',
+  layout_restored: 'Restored the layout from the card config.',
+
+  /* diagnostics */
+  missing_warning:
+    'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
+};
+
+const EFC_VERSION = '1.9.0';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -1645,6 +1897,9 @@ class EnergyFlowCard extends HTMLElement {
       const el = this._els['grp-' + g.id];
       if (!el) return;
       set(el, 'pwr', fmtW(g.power));
+      if (g.virtual) {
+        set(el, 'meta', t('unmetered_meta'));
+      } else {
       set(
         el,
         'meta',
@@ -1659,6 +1914,7 @@ class EnergyFlowCard extends HTMLElement {
           fmtKwh(g.energy) +
           (g.bidir ? ' · ' + t(g.power < 0 ? 'flow_out' : 'flow_in') : '')
       );
+      }
       flags(el, g.off, !g.off && g.idle);
 
       /* bilans grupy dwukierunkowej — jak przy węźle sieci */

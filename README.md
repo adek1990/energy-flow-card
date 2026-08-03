@@ -36,7 +36,7 @@ interfejs w całości po polsku.
 
 ### Ręcznie
 
-1. Skopiuj `dist/energy-flow-card.js` i `dist/energy-flow-card-editor.js` do
+1. Skopiuj oba pliki z `dist/` (`energy-flow-card.js` i `energy-flow-card-editor.js`) do
    `/config/www/energy-flow-card/`.
 2. Ustawienia → Pulpity nawigacyjne → ⋮ → Zasoby → **Dodaj zasób**:
    - URL: `/local/energy-flow-card/energy-flow-card.js`
@@ -180,10 +180,13 @@ traktowane jako awaria: pokazuje `—` w kolumnie mocy i nie jest wygaszane.
 
 ### Język
 
-Interfejs karty jest tłumaczony przez pliki `dist/lang-pl.js` i `dist/lang-en.js`. Nowy język to
-kopia jednego z nich i wpis w mapie `LANGS` na górze `energy-flow-card.js`. Tłumaczenie obejmuje też
-formaty liczb (`6,20 kW` vs `6.20 kW`), nazwy miesięcy, dni tygodnia i odmianę liczebników
-(polskie 1 / 2‑4 / 5+).
+Słowniki `PL` i `EN` siedzą na górze `dist/energy-flow-card.js`. Nowy język to kopia jednego z nich
+plus wpis w mapie `LANGS` obok. Tłumaczenie obejmuje też formaty liczb (`6,20 kW` vs `6.20 kW`),
+nazwy miesięcy, dni tygodnia i odmianę liczebników (polskie 1 / 2‑4 / 5+).
+
+> Słowniki są **w pliku karty**, a nie w osobnych plikach, celowo. Przeglądarka cache'uje każdy moduł
+> niezależnie, więc po aktualizacji potrafiła podać świeżą kartę ze starym słownikiem — na ekranie
+> wychodziły wtedy surowe klucze w rodzaju `sum_produced`. Jeden plik = brak rozjazdu wersji.
 
 ### Układ węzłów: przeciąganie myszą
 
@@ -248,10 +251,26 @@ sumuje encje wszystkich kanałów.
 ### Grupa dwukierunkowa
 
 Grupa z własnym licznikiem dwukierunkowym (np. podlicznik budynku gospodarczego) zachowuje się jak
-węzeł sieci: pokazuje bilans , dopisuje / w opisie, a linia do
-domu odwraca kierunek i zmienia kolor na produkcyjny, gdy grupa oddaje energię.
+węzeł sieci: pokazuje bilans `↓ pobrane  ↑ oddane`, dopisuje `pobiera` albo `oddaje` w opisie,
+a linia do domu odwraca kierunek i zmienia kolor na produkcyjny, gdy grupa oddaje energię.
 
-\
+```yaml
+- name: Altana
+  icon: server
+  bidirectional: true
+  energy_import: sensor.podlicznik_pobor
+  energy_export: sensor.podlicznik_oddanie
+  devices:
+    - name: Faza 1
+      power: sensor.podlicznik_moc_faza_1
+      voltage: sensor.podlicznik_napiecie_faza_1
+      current: sensor.podlicznik_prad_faza_1
+```
+
+Ujemna moc grupy jest wtedy poprawnym stanem, a nie błędem — oznacza, że przez ten obwód wraca
+nadwyżka. Moduł nadrzędny sumuje moc i energię kanałów, ale **nie** sumuje napięć, bo suma napięć
+fazowych nie ma sensu fizycznego.
+
 ### Listy encji
 
 Każde pole encji (`power`, `energy`, `energy_import`, …) przyjmuje pojedyncze id albo listę — wtedy

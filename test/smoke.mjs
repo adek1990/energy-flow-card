@@ -781,7 +781,18 @@ ok(!!um, 'grupa niezmierzona istnieje');
 ok(um.power === 10039, `niezmierzone = dom − zmierzone: ${um.power} W (10060 − 21)`);
 ok(Math.abs(um.energy - 96.47) < 0.01, `niezmierzona energia: ${um.energy} kWh (97,24 − 0,77)`);
 ok(ce._m.groups.filter((g) => !g.virtual).reduce((t, g) => t + g.power, 0) === 21, 'grupa wirtualna nie wchodzi do sumy odbiorników');
+// żaden napis na karcie nie może być surowym kluczem tłumaczenia
+const rawKeys = (el) =>
+  [...el.shadowRoot.querySelectorAll('*')]
+    .map((e) => (e.children.length ? '' : (e.textContent || '').trim()))
+    .filter((tx) => /^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(tx) && !tx.startsWith('sensor'));
+ok(rawKeys(ce).length === 0, `brak surowych kluczy tłumaczeń: ${rawKeys(ce).join(', ') || 'czysto'}`);
+
 const umTile = ce.shadowRoot.querySelector('[data-group="__unmetered"]');
+ok(
+  umTile.querySelector('[data-f="meta"]').textContent === 'reszta domu poza pomiarem',
+  `opis kafelka niezmierzonego: ${umTile.querySelector('[data-f="meta"]').textContent}`
+);
 ok(!!umTile && umTile.classList.contains('est'), 'kafelek niezmierzony ma przerywaną ramkę');
 ok(!umTile.querySelector('.grp-chev'), 'kafelek niezmierzony nie ma strzałki rozwijania');
 ok(umTile.querySelector('[data-f="pwr"]').textContent === '10,0 kW', `moc na kafelku: ${umTile.querySelector('[data-f="pwr"]').textContent}`);
