@@ -265,9 +265,61 @@ groups:
             power: sensor.sonoff_dual_r3_13_power_2
             energy: sensor.sonoff_dual_r3_13_energy_2_daily
 
+  # Licznik 3-fazowy Zamel MEW-01 w altanie.
+  # UWAGA: licznik jest DWUKIERUNKOWY — faza 2 pokazuje obecnie −2249 W, czyli
+  # przez ten obwód wraca nadwyżka z PV. Ujemna moc fazy jest więc poprawna.
+  # Jeśli to skutek odwrotnie zamontowanego przekładnika, dodaj przy fazie: invert: true
+  - name: Altana
+    icon: server
+    expanded: true
+    devices:
+      - name: Licznik Zamel MEW-01
+        icon: server
+        devices:
+          - name: Faza 1
+            icon: plug
+            power: sensor.zamel_mew_01_0_electricity_meter_power_active_phase_1
+            voltage: sensor.zamel_mew_01_0_electricity_meter_voltage_phase_1
+            current: sensor.zamel_mew_01_0_electricity_meter_current_phase_1
+            energy: sensor.altana_faza_1_daily
+          - name: Faza 2
+            icon: plug
+            power: sensor.zamel_mew_01_0_electricity_meter_power_active_phase_2
+            voltage: sensor.zamel_mew_01_0_electricity_meter_voltage_phase_2
+            current: sensor.zamel_mew_01_0_electricity_meter_current_phase_2
+            energy: sensor.altana_faza_2_daily
+          - name: Faza 3
+            icon: plug
+            power: sensor.zamel_mew_01_0_electricity_meter_power_active_phase_3
+            voltage: sensor.zamel_mew_01_0_electricity_meter_voltage_phase_3
+            current: sensor.zamel_mew_01_0_electricity_meter_current_phase_3
+            energy: sensor.altana_faza_3_daily
+
 grid_options:
   columns: full
   rows: auto
+
+# =============================================================================
+# LICZNIK ALTANY — liczniki Zamela są od uruchomienia (8175 / 8457 kWh),
+# więc karta potrzebuje dobowych. configuration.yaml:
+#
+# utility_meter:
+#   altana_faza_1_daily:
+#     source: sensor.zamel_mew_01_0_electricity_meter_total_forward_active_energy_phase_1
+#     cycle: daily
+#   altana_faza_2_daily:
+#     source: sensor.zamel_mew_01_0_electricity_meter_total_forward_active_energy_phase_2
+#     cycle: daily
+#   altana_faza_3_daily:
+#     source: sensor.zamel_mew_01_0_electricity_meter_total_forward_active_energy_phase_3
+#     cycle: daily
+#
+# Do czasu ich utworzenia karta pokaże przy fazach "brak encji".
+# Alternatywnie usuń linie energy: — zostanie sama moc.
+#
+# Energia oddana przez ten obwód, gdyby była potrzebna:
+#   sensor.zamel_mew_01_0_electricity_meter_total_reverse_active_energy_phase_N
+# =============================================================================
 
 # =============================================================================
 # OPCJONALNIE — poprawka błędnej klasy licznika rekuperatora (customize.yaml):

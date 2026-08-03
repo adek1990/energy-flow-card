@@ -7,7 +7,7 @@
 import PL from './lang-pl.js';
 import EN from './lang-en.js';
 
-const EFC_VERSION = '1.6.0';
+const EFC_VERSION = '1.6.1';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -357,6 +357,7 @@ const STYLES = `
 .dev .n { flex:1;min-width:0;font-size:11px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .dev .p { font-size:11px;font-weight:600;color:var(--cons);white-space:nowrap; }
 .dev .e { font-size:10px;color:var(--mut);white-space:nowrap;min-width:44px;text-align:right; }
+.dev .dcv { font-size:10px;color:var(--mut);white-space:nowrap; }
 .dev-chev { font-size:10px;color:var(--mut);width:9px;text-align:center;flex:none; }
 .dev-body { display:flex;flex-direction:column; }
 .dev-body .dev .n { color:var(--mut); }
@@ -651,6 +652,8 @@ class EnergyFlowCard extends HTMLElement {
         icon: d.icon || 'plug',
         power: d.power || null,
         energy: d.energy || null,
+        voltage: d.voltage || null,
+        current: d.current || null,
         invert,
         expanded: !!d.expanded,
         children: (d.devices || []).map((cd, k) => normDevice(cd, key + '_' + k, invert))
@@ -840,6 +843,7 @@ class EnergyFlowCard extends HTMLElement {
         ${nodeSvg(14, s.icon)}
         <div class="n">${esc(s.name || t('string_n', { n: si + 1 }))}</div>
         <div class="mono p" data-f="pwr">—</div>
+        <div class="mono dcv hidden" data-f="dcv"></div>
         <div class="mono e" data-f="kwh">—</div>
       </div>`
           )
@@ -856,6 +860,7 @@ class EnergyFlowCard extends HTMLElement {
         ${nodeSvg(14, d.icon)}
         <div class="n">${esc(d.name || t('device'))}</div>
         <div class="mono p" data-f="pwr">—</div>
+        <div class="mono dcv hidden" data-f="dcv"></div>
         <div class="mono e" data-f="kwh">—</div>
         ${kids.length ? '<span class="dev-chev" data-f="chev">▸</span>' : ''}
       </div>
@@ -1305,6 +1310,9 @@ class EnergyFlowCard extends HTMLElement {
       const ownEnergy = asList(d.energy).length > 0;
       const p = ownPower ? this._power(d.power, d.invert) : null;
       const e = ownEnergy ? this._energy(d.energy) : null;
+      /* napięcie i prąd tylko z własnych encji — sumowanie po kanałach nie miałoby sensu */
+      const u = this._sum(d.voltage, VOLT_FACTOR, false);
+      const a = this._sum(d.current, AMP_FACTOR, false);
       const kidPower = children.reduce((t, k) => t + (k.off || k.unset ? 0 : k.power), 0);
       const kidEnergy = children.reduce((t, k) => t + (k.energy || 0), 0);
       const kidEntities = (f) => children.reduce((a, k) => a.concat(k[f]), []);
@@ -1323,6 +1331,8 @@ class EnergyFlowCard extends HTMLElement {
       return {
         key: d.key,
         name: d.name || this._tx('device'),
+        volt: u.off ? null : u.v,
+        amp: a.off ? null : a.v,
         icon: d.icon,
         power,
         energy,
@@ -1654,6 +1664,12 @@ class EnergyFlowCard extends HTMLElement {
         if (!de) return;
         set(de, 'pwr', d.missing ? t('no_entity') : d.off ? t('no_data') : d.unset ? '—' : fmtW(d.power));
         set(de, 'kwh', d.off ? '—' : fmtKwh(d.energy));
+        const dcv = de.querySelector('[data-f="dcv"]');
+        if (dcv) {
+          const parts = d.off ? [] : [fmtV(d.volt), fmtA(d.amp)].filter(Boolean);
+          dcv.classList.toggle('hidden', !parts.length);
+          dcv.textContent = parts.join(' · ');
+        }
         flags(de, d.off, !d.off && d.idle);
         nodes['dev_' + d.key] = {
           label: d.hasChildren ? d.name + ' · ' + t('sum_suffix') : d.name,
@@ -2473,6 +2489,8 @@ class EnergyFlowCard extends HTMLElement {
     let xlabels = [];
     let pts = null;
     let max = 1;
+    let lo = 0;
+    let hi = 1;
     let t0 = 0;
     let step = 0;
 
@@ -2481,18 +2499,29 @@ class EnergyFlowCard extends HTMLElement {
       t0 = power.t0;
       step = power.step;
       const n = pts.length;
-      max = Math.max.apply(null, pts) * 1.12 || 1;
+      /* dziedzina obejmuje zero i wartości ujemne — inaczej przebieg wychodzi poza wykres */
+      const rawLo = Math.min.apply(null, pts);
+      const rawHi = Math.max.apply(null, pts);
+      const padding = (Math.max(rawHi, 0) - Math.min(rawLo, 0)) * 0.12 || 1;
+      hi = Math.max(rawHi, 0) + padding;
+      lo = Math.min(rawLo, 0) - (rawLo < 0 ? padding : 0);
+      max = hi;
       const X = (i) => (i / (n - 1)) * 760;
-      const Y = (v) => 200 - (v / max) * 186;
+      const Y = (v) => 200 - ((v - lo) / (hi - lo || 1)) * 186;
+      const yZero = Y(0);
       line = 'M ' + X(0).toFixed(1) + ' ' + Y(pts[0]).toFixed(1);
       for (let i = 1; i < n; i++) line += ' L ' + X(i).toFixed(1) + ' ' + Y(pts[i]).toFixed(1);
-      area = line + ' L 760 200 L 0 200 Z';
-      hlines = [0, 0.5, 1].map((f) => ({
-        y: (200 - f * 186).toFixed(1),
-        top: Math.max(0, 200 - f * 186 - 13),
-        label: fmtW(max * f)
+      /* wypełnienie zawsze do linii zera, więc ujemne płaty rysują się w dół */
+      area = line + ' L 760 ' + yZero.toFixed(1) + ' L 0 ' + yZero.toFixed(1) + ' Z';
+      const levels = rawLo < 0 ? [lo, 0, hi] : [0, hi / 2, hi];
+      hlines = levels.map((v) => ({
+        y: Y(v).toFixed(1),
+        top: Math.max(0, Math.min(187, Y(v) - 13)),
+        label: fmtW(v),
+        zero: v === 0 && rawLo < 0
       }));
-      peak = fmtW(Math.max.apply(null, pts));
+      /* „szczyt" to wartość o największej wartości bezwzględnej */
+      peak = fmtW(Math.abs(rawLo) > Math.abs(rawHi) ? rawLo : rawHi);
       avg = fmtW(pts.reduce((a, b) => a + b, 0) / n);
       xlabels = bounds.single
         ? ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00']
@@ -2500,6 +2529,7 @@ class EnergyFlowCard extends HTMLElement {
     }
 
     let barRects = [];
+    let barZero = 100;
     let barLabels = [];
     let barCaption = '';
     let barsData = bars;
@@ -2519,16 +2549,21 @@ class EnergyFlowCard extends HTMLElement {
     }
 
     if (barsData && barsData.length) {
-      const vals = barsData.map((b) => Math.max(0, b.v || 0));
-      const bmax = Math.max.apply(null, vals) || 1;
+      const vals = barsData.map((b) => b.v || 0);
+      const bLo = Math.min(0, Math.min.apply(null, vals));
+      const bHi = Math.max(0, Math.max.apply(null, vals));
+      const bSpan = bHi - bLo || 1;
+      const BY = (v) => 100 - ((v - bLo) / bSpan) * 92;
+      barZero = BY(0);
       const bw = 760 / vals.length;
       barRects = vals.map((v, i) => {
-        const h = Math.max(1, (v / bmax) * 92);
+        const y = BY(v);
+        const h = Math.max(1, Math.abs(y - barZero));
         return {
           x: (i * bw + bw * 0.16).toFixed(1),
           w: (bw * 0.68).toFixed(1),
           h: h.toFixed(1),
-          y: (100 - h).toFixed(1)
+          y: Math.min(y, barZero).toFixed(1)
         };
       });
       barLabels = barsData.map((b, i) => {
@@ -2555,9 +2590,12 @@ class EnergyFlowCard extends HTMLElement {
       bars: barRects,
       barLabels,
       barCaption,
+      barZero,
       /* dane pod celownik podążający za kursorem */
       pts,
       max,
+      lo,
+      hi,
       t0,
       step,
       single: bounds.single,
@@ -2624,7 +2662,7 @@ class EnergyFlowCard extends HTMLElement {
         ch.pts.length,
         (i) => fmtW(ch.pts[i]),
         (i) => stamp(ch.t0 + i * ch.step),
-        (i) => 200 - (ch.pts[i] / ch.max) * 186
+        (i) => 200 - ((ch.pts[i] - ch.lo) / (ch.hi - ch.lo || 1)) * 186
       );
     }
 
@@ -2699,7 +2737,7 @@ class EnergyFlowCard extends HTMLElement {
                  <div class="mono sec-m">${t('peak')} ${ch.peak} · ${t('average')} ${ch.avg}</div>
                </div>
                <div class="chart-wrap">
-                 <svg viewBox="0 0 760 200" preserveAspectRatio="none" style="width:100%;height:200px;display:block;overflow:visible">
+                 <svg viewBox="0 0 760 200" preserveAspectRatio="none" style="width:100%;height:200px;display:block;overflow:hidden;pointer-events:none">
                    <defs>
                      <linearGradient id="efcArea" x1="0" y1="0" x2="0" y2="1">
                        <stop offset="0%" stop-color="${ch.color}" stop-opacity="0.34"></stop>
@@ -2707,7 +2745,10 @@ class EnergyFlowCard extends HTMLElement {
                      </linearGradient>
                    </defs>
                    ${ch.hlines
-                     .map((h) => `<line x1="0" y1="${h.y}" x2="760" y2="${h.y}" stroke="var(--line)" stroke-width="1"></line>`)
+                     .map(
+                       (h) =>
+                         `<line x1="0" y1="${h.y}" x2="760" y2="${h.y}" stroke="var(--${h.zero ? 'mut' : 'line'})" stroke-width="1" opacity="${h.zero ? 0.55 : 1}"></line>`
+                     )
                      .join('')}
                    <path d="${ch.area}" fill="url(#efcArea)"></path>
                    <path d="${ch.line}" fill="none" stroke="${ch.color}" stroke-width="1.8" stroke-linejoin="round"></path>
@@ -2727,8 +2768,8 @@ class EnergyFlowCard extends HTMLElement {
                  <div class="mono sec-m">${esc(ch.barCaption)}</div>
                </div>
                <div class="bars-wrap">
-                 <svg viewBox="0 0 760 110" preserveAspectRatio="none" style="width:100%;height:110px;display:block">
-                   <line x1="0" y1="100" x2="760" y2="100" stroke="var(--line)" stroke-width="1"></line>
+                 <svg viewBox="0 0 760 110" preserveAspectRatio="none" style="width:100%;height:110px;display:block;overflow:hidden;pointer-events:none">
+                   <line x1="0" y1="${ch.barZero}" x2="760" y2="${ch.barZero}" stroke="var(--line)" stroke-width="1"></line>
                    ${ch.bars
                      .map(
                        (r) =>

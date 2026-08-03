@@ -744,6 +744,18 @@ class EnergyFlowCardEditor extends HTMLElement {
           })
         )
       );
+      card.appendChild(
+        this._group(
+          this._entity('Napięcie (opcjonalnie)', dev.voltage, (v) => {
+            dev.voltage = v;
+            this._emit();
+          }),
+          this._entity('Prąd (opcjonalnie)', dev.current, (v) => {
+            dev.current = v;
+            this._emit();
+          })
+        )
+      );
     } else {
       card.appendChild(this._hint('Moc i energia liczone jako suma kanałów poniżej.'));
       const box = document.createElement('div');

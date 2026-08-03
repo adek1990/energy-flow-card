@@ -476,6 +476,168 @@ ok(c6._modalHost.textContent.includes('Kanał 1'), 'historia dotyczy kliknięteg
 c6._closeModal();
 ok(c6._nodes['dev_d0_0'].powerEntities.length === 2, 'historia modułu sumuje encje obu kanałów');
 
+console.log('\n— licznik dwukierunkowy (ujemna faza) —');
+const hassZ = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.f1', 715.25, 'W'),
+    S('sensor.f2', -2249.47, 'W'),
+    S('sensor.f3', 3.23, 'W')
+  ]),
+  callWS: async () => ({})
+};
+const cz = document.createElement('energy-flow-card');
+cz.setConfig({
+  type: 'custom:energy-flow-card',
+  groups: [
+    {
+      name: 'Altana',
+      expanded: true,
+      devices: [
+        {
+          name: 'Licznik',
+          devices: [
+            { name: 'Faza 1', power: 'sensor.f1' },
+            { name: 'Faza 2', power: 'sensor.f2' },
+            { name: 'Faza 3', power: 'sensor.f3' }
+          ]
+        }
+      ]
+    }
+  ]
+});
+document.body.appendChild(cz);
+cz._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cz.hass = hassZ;
+await new Promise((r) => setTimeout(r, 30));
+const zg = cz._m.groups[0];
+ok(Math.abs(zg.power + 1530.99) < 0.01, `suma faz zachowuje znak: ${zg.power} W`);
+ok(cz.shadowRoot.querySelector('[data-node="dev_d0_0_1"] [data-f="pwr"]').textContent === '-2,25 kW', `ujemna faza widoczna: ${cz.shadowRoot.querySelector('[data-node="dev_d0_0_1"] [data-f="pwr"]').textContent}`);
+ok(zg.leafCount === 3, `liczone są fazy: ${zg.leafCount}`);
+const zLink = [...cz.shadowRoot.querySelectorAll('#lyr-idle path')].find((p) => p.getAttribute('stroke-dasharray') === '3 6');
+ok(!!zLink, 'ujemny przepływ nie rysuje animowanej linii zużycia');
+ok(cz.shadowRoot.querySelectorAll('#lyr-act path').length === 0, 'brak animacji przy ujemnej sumie grupy');
+
+console.log('\n— napięcie i prąd przy odbiornikach —');
+const hassVA = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.f1p', 715.25, 'W'),
+    S('sensor.f1u', 243.09, 'V'),
+    S('sensor.f1i', 2.98, 'A'),
+    S('sensor.f2p', -2249.47, 'W'),
+    S('sensor.f2u', 238.52, 'V'),
+    S('sensor.f3p', 3.23, 'W')
+  ]),
+  callWS: async () => ({})
+};
+const cva = document.createElement('energy-flow-card');
+cva.setConfig({
+  type: 'custom:energy-flow-card',
+  groups: [
+    {
+      name: 'Altana',
+      expanded: true,
+      devices: [
+        {
+          name: 'Licznik',
+          devices: [
+            { name: 'Faza 1', power: 'sensor.f1p', voltage: 'sensor.f1u', current: 'sensor.f1i' },
+            { name: 'Faza 2', power: 'sensor.f2p', voltage: 'sensor.f2u' },
+            { name: 'Faza 3', power: 'sensor.f3p' }
+          ]
+        }
+      ]
+    }
+  ]
+});
+document.body.appendChild(cva);
+cva._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cva.hass = hassVA;
+await new Promise((r) => setTimeout(r, 30));
+const dcv = (k) => cva.shadowRoot.querySelector(`[data-node="dev_${k}"] [data-f="dcv"]`);
+ok(dcv('d0_0_0').textContent === '243,1 V · 2,98 A', `V i A obok mocy: ${dcv('d0_0_0').textContent}`);
+ok(!dcv('d0_0_0').classList.contains('hidden'), 'kolumna V/A widoczna, gdy są dane');
+ok(dcv('d0_0_1').textContent === '238,5 V', `samo napięcie bez prądu: ${dcv('d0_0_1').textContent}`);
+ok(dcv('d0_0_2').classList.contains('hidden'), 'bez V/A kolumna się nie pokazuje');
+ok(cva._m.groups[0].devices[0].children[0].volt === 243.09, 'napięcie w modelu urządzenia');
+ok(cva._m.groups[0].devices[0].volt === null, 'moduł nie sumuje napięć kanałów');
+ok(
+  cva.shadowRoot.querySelector('[data-node="dev_d0_0_0"] [data-f="pwr"]').textContent === '715 W',
+  'moc nadal na swoim miejscu'
+);
+
+console.log('\n— wykres z wartościami ujemnymi —');
+const hassNeg = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([S('sensor.bidir', -2249, 'W')]),
+  callWS: async (msg) => {
+    if (msg.type === 'history/history_during_period') {
+      const out = {};
+      msg.entity_ids.forEach((id) => {
+        // przebieg od -2500 do +800 W
+        out[id] = Array.from({ length: 20 }, (_, i) => ({
+          s: String(-2500 + i * 174),
+          lu: (new Date(msg.start_time).getTime() + i * 600000) / 1000
+        }));
+      });
+      return out;
+    }
+    if (msg.type === 'recorder/statistics_during_period') {
+      const out = {};
+      msg.statistic_ids.forEach((id) => {
+        out[id] = Array.from({ length: 6 }, (_, i) => ({
+          start: new Date(msg.start_time).getTime() + i * 3600000,
+          change: i < 3 ? -0.5 - i * 0.2 : 0.4 + i * 0.1
+        }));
+      });
+      return out;
+    }
+    return {};
+  }
+};
+const cn = document.createElement('energy-flow-card');
+cn.setConfig({
+  type: 'custom:energy-flow-card',
+  groups: [{ name: 'Altana', expanded: true, devices: [{ name: 'Faza 2', power: 'sensor.bidir', energy: 'sensor.bidir' }] }]
+});
+document.body.appendChild(cn);
+cn._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cn.hass = hassNeg;
+await new Promise((r) => setTimeout(r, 30));
+cn._openModal(cn._nodes['dev_d0_0'], 'dev_d0_0');
+await new Promise((r) => setTimeout(r, 60));
+const chN = cn._modal.chart;
+const ys = chN.line.match(/-?\d+\.\d+/g).filter((_, i) => i % 2 === 1).map(Number);
+ok(Math.min(...ys) >= 0 && Math.max(...ys) <= 200, `przebieg mieści się w wykresie: y od ${Math.min(...ys).toFixed(1)} do ${Math.max(...ys).toFixed(1)}`);
+ok(chN.lo < 0 && chN.hi > 0, `dziedzina obejmuje zero: ${Math.round(chN.lo)} … ${Math.round(chN.hi)} W`);
+const zeroLine = chN.hlines.find((h) => h.zero);
+ok(!!zeroLine, 'wykres ma wyróżnioną linię zera');
+ok(chN.hlines.every((h) => parseFloat(h.y) >= 0 && parseFloat(h.y) <= 200), 'linie pomocnicze w granicach wykresu');
+ok(chN.hlines.every((h) => h.top >= 0 && h.top <= 187), 'etykiety osi nie uciekają poza wykres');
+ok(chN.peak === '-2,50 kW', `szczyt bierze największą wartość bezwzględną: ${chN.peak}`);
+ok(chN.area.includes('L 760 ' + parseFloat(zeroLine.y).toFixed(1)), 'wypełnienie kończy się na linii zera');
+// tylko płótna wykresów, nie ikony w nagłówku
+const svgs = [...cn._modalHost.querySelectorAll('svg')].filter((e) =>
+  (e.getAttribute('viewBox') || '').startsWith('0 0 760')
+);
+ok(svgs.length === 2, `oba wykresy obecne: ${svgs.length}`);
+ok(
+  svgs.every((e) => /pointer-events:none/.test(e.getAttribute('style') || '')),
+  'wykresy nie przechwytują kliknięć'
+);
+ok(
+  svgs.every((e) => !/overflow:visible/.test(e.getAttribute('style') || '')),
+  'wykresy nie wychodzą poza swoje ramy'
+);
+ok(chN.barZero > 0 && chN.barZero < 100, `słupki mają własną linię zera: y=${chN.barZero.toFixed(1)}`);
+ok(chN.bars.every((r) => parseFloat(r.y) >= 0 && parseFloat(r.y) + parseFloat(r.h) <= 101), 'słupki mieszczą się w swoim polu');
+// przyciski nadal klikalne przy ujemnym przebiegu
+cn._modalHost.querySelector('#win-prev').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 40));
+ok(!!cn._modal, 'nawigacja działa mimo ujemnych wartości');
+cn._closeModal();
+
 console.log('\n— podsumowanie dnia i węzeł niezmierzony —');
 // realne liczby: PV 84,8 kWh · pobór 4,02+13,42 · oddanie 5,0+0 · zmierzone odbiorniki 0,77 kWh
 const hassE = {
