@@ -123,6 +123,14 @@ const PL = {
   win_hours: 'godz.',
   win_days: 'dni',
 
+  /* okres energii */
+  per_live: 'Teraz',
+  per_day: 'Dziś',
+  per_week: 'Tydzień',
+  per_month: 'Miesiąc',
+  per_year: 'Rok',
+  per_title: 'Okres liczników energii',
+
   /* układ */
   layout: '⠿ Układ',
   layout_done: '✓ Gotowe',
@@ -254,6 +262,14 @@ const EN = {
   win_hours: 'h',
   win_days: 'days',
 
+  /* energy period */
+  per_live: 'Now',
+  per_day: 'Today',
+  per_week: 'Week',
+  per_month: 'Month',
+  per_year: 'Year',
+  per_title: 'Energy counter period',
+
   /* layout */
   layout: '⠿ Layout',
   layout_done: '✓ Done',
@@ -269,7 +285,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.10.2';
+const EFC_VERSION = '1.11.0';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -354,6 +370,35 @@ const fmtHz = (v) => (v === null || v === undefined ? null : nf(v, 2) + ' Hz');
 const fmtV = (v) => (v === null || v === undefined ? null : nf(v, Math.abs(v) < 1000 ? 1 : 0) + ' V');
 const fmtA = (a) => (a === null || a === undefined ? null : nf(a, Math.abs(a) < 100 ? 2 : 1) + ' A');
 const ENERGY_FACTOR = { Wh: 0.001, kWh: 1, MWh: 1000, GWh: 1000000 };
+const VA_FACTOR = { VA: 1, kVA: 1000, MVA: 1000000 };
+/* `live` czyta stan encji; reszta to okna liczone z przyrostów w rejestratorze */
+const PERIODS = ['live', 'day', 'week', 'month', 'year'];
+
+/* pola encji, jakie może mieć węzeł albo urządzenie — używane przy zbieraniu
+   „co już jest przypisane" i przy odpytywaniu rejestratora o energię */
+const METRIC_FIELDS = [
+  'power',
+  'power_import',
+  'power_export',
+  'energy',
+  'energy_import',
+  'energy_export',
+  'voltage',
+  'current',
+  'frequency',
+  'apparent',
+  'power_factor'
+];
+const ENERGY_FIELDS = ['energy', 'energy_import', 'energy_export'];
+const fmtVA = (v) =>
+  v === null || v === undefined
+    ? null
+    : Math.abs(v) >= 1000
+    ? nf(v / 1000, 2) + ' kVA'
+    : nf(v, 0) + ' VA';
+/* współczynnik mocy bywa podawany jako ułamek (0,65) albo w procentach (65) */
+const fmtPF = (v) =>
+  v === null || v === undefined ? null : 'cosφ ' + nf(Math.abs(v) > 1.5 ? v / 100 : v, 2);
 
 /* każde pole encji może być pojedynczym id albo listą id — lista jest sumowana */
 const asList = (ref) =>
@@ -435,6 +480,16 @@ const STYLES = `
 .head .kicker { font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--mut); }
 .head .title { font-size:22px;font-weight:600;letter-spacing:-.01em;margin-top:6px; }
 .head .sub { font-size:13px;color:var(--mut);margin-top:5px;max-width:640px; }
+
+/* przełącznik okresu liczników — zwija się w wiersz na wąskim ekranie */
+.per-bar { display:flex;flex-wrap:wrap;gap:6px;margin-top:10px; }
+.per-btn {
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:4px 10px;border:1px solid var(--line);border-radius:999px;
+  color:var(--mut);cursor:pointer;user-select:none;
+}
+.per-btn:hover { border-color:var(--cons);color:var(--cons); }
+.per-btn.on { background:color-mix(in oklab,var(--cons) 18%,var(--panel));border-color:var(--cons);color:var(--cons); }
 
 .card {
   position:relative;width:100%;padding:18px;border:1px solid var(--line);
@@ -819,6 +874,7 @@ class EnergyFlowCard extends HTMLElement {
     this._rawLayoutMode = this._cfg.layout.mode;
     this._editLayout = !!this._cfg.layout.edit;
     this._loadStoredLayout();
+    this._loadStoredPeriod();
     this._build();
     if (this._hass) this._update();
   }
@@ -837,6 +893,13 @@ class EnergyFlowCard extends HTMLElement {
       theme_mode: raw.theme_mode || 'auto',
       language: raw.language || 'auto',
       idle_threshold: Number(raw.idle_threshold) > 0 ? Number(raw.idle_threshold) : 15,
+      /* `live` = odczyt stanu encji jak dotąd; pozostałe okresy liczy rejestrator
+         ze statystyk długoterminowych, więc wystarczy licznik narastający */
+      energy_period: PERIODS.indexOf(raw.energy_period) >= 0 ? raw.energy_period : 'live',
+      period_selector:
+        raw.period_selector !== undefined
+          ? !!raw.period_selector
+          : PERIODS.indexOf(raw.energy_period) > 0,
       solar: null,
       grid: null,
       battery: null,
@@ -872,6 +935,8 @@ class EnergyFlowCard extends HTMLElement {
         voltage: raw.solar.voltage || null,
         current: raw.solar.current || null,
         frequency: raw.solar.frequency || null,
+        apparent: raw.solar.apparent || null,
+        power_factor: raw.solar.power_factor || null,
         strings: (raw.solar.strings || []).map((s, i) => ({
           key: 'str' + i,
           name: s.name || null,
@@ -880,6 +945,8 @@ class EnergyFlowCard extends HTMLElement {
           energy: s.energy || null,
           voltage: s.voltage || null,
           current: s.current || null,
+          apparent: s.apparent || null,
+          power_factor: s.power_factor || null,
           max_power: Number(s.max_power) || 0,
           invert: s.invert === undefined ? !!raw.solar.invert : !!s.invert
         }))
@@ -894,6 +961,11 @@ class EnergyFlowCard extends HTMLElement {
         power_export: raw.grid.power_export || null,
         energy_import: raw.grid.energy_import || null,
         energy_export: raw.grid.energy_export || null,
+        voltage: raw.grid.voltage || null,
+        current: raw.grid.current || null,
+        frequency: raw.grid.frequency || null,
+        apparent: raw.grid.apparent || null,
+        power_factor: raw.grid.power_factor || null,
         invert: !!raw.grid.invert
       };
     }
@@ -908,12 +980,21 @@ class EnergyFlowCard extends HTMLElement {
       };
     }
 
+    const rh = raw.house || {};
     c.house = {
-      name: (raw.house && raw.house.name) || null,
-      power: (raw.house && raw.house.power) || null,
-      energy: (raw.house && raw.house.energy) || null,
-      self_sufficiency: (raw.house && raw.house.self_sufficiency) || null,
-      invert: !!(raw.house && raw.house.invert)
+      name: rh.name || null,
+      power: rh.power || null,
+      energy: rh.energy || null,
+      /* dom opomiarowany licznikiem dwukierunkowym — jak węzeł sieci */
+      energy_import: rh.energy_import || null,
+      energy_export: rh.energy_export || null,
+      self_sufficiency: rh.self_sufficiency || null,
+      voltage: rh.voltage || null,
+      current: rh.current || null,
+      frequency: rh.frequency || null,
+      apparent: rh.apparent || null,
+      power_factor: rh.power_factor || null,
+      invert: !!rh.invert
     };
 
     /* urządzenie może mieć własne pod-urządzenia (`devices:`) — np. kanały modułu.
@@ -928,6 +1009,9 @@ class EnergyFlowCard extends HTMLElement {
         energy: d.energy || null,
         voltage: d.voltage || null,
         current: d.current || null,
+        frequency: d.frequency || null,
+        apparent: d.apparent || null,
+        power_factor: d.power_factor || null,
         invert,
         expanded: !!d.expanded,
         children: (d.devices || []).map((cd, k) => normDevice(cd, key + '_' + k, invert))
@@ -988,40 +1072,25 @@ class EnergyFlowCard extends HTMLElement {
     const c = this._cfg;
     const out = new Set();
     const add = (ref) => asList(ref).forEach((id) => out.add(id));
+    /* każde pole encji w węźle — jedna lista zamiast wyliczanki przy każdym nowym pomiarze */
+    const addAll = (o) => {
+      if (!o) return;
+      METRIC_FIELDS.forEach((f) => add(o[f]));
+    };
     if (c.solar) {
-      add(c.solar.power);
-      add(c.solar.energy);
-      add(c.solar.voltage);
-      add(c.solar.current);
-      add(c.solar.frequency);
+      addAll(c.solar);
       add(c.solar.status);
-      c.solar.strings.forEach((x) => {
-        add(x.power);
-        add(x.energy);
-        add(x.voltage);
-        add(x.current);
-      });
+      c.solar.strings.forEach(addAll);
     }
-    if (c.grid) {
-      add(c.grid.power);
-      add(c.grid.power_import);
-      add(c.grid.power_export);
-      add(c.grid.energy_import);
-      add(c.grid.energy_export);
-    }
+    addAll(c.grid);
     if (c.battery) {
-      add(c.battery.power);
+      addAll(c.battery);
       add(c.battery.soc);
-      add(c.battery.energy);
     }
-    add(c.house.power);
-    add(c.house.energy);
+    addAll(c.house);
     add(c.house.self_sufficiency);
     const walk = (d) => {
-      add(d.power);
-      add(d.energy);
-      add(d.voltage);
-      add(d.current);
+      addAll(d);
       d.children.forEach(walk);
     };
     c.groups.forEach((g) => {
@@ -1183,9 +1252,185 @@ class EnergyFlowCard extends HTMLElement {
     return this._sum(ref, POWER_FACTOR, invert);
   }
 
+  /* moc pozorna sumuje się po fazach, ale współczynnik mocy trzeba uśrednić */
+  _va(ref) {
+    return this._sum(ref, VA_FACTOR, false);
+  }
+
+  _pf(ref) {
+    const ids = asList(ref);
+    if (!ids.length) return { v: null, off: true };
+    let sum = 0;
+    let n = 0;
+    ids.forEach((id) => {
+      const r = this._read(id, {});
+      if (!r.off) {
+        sum += r.v;
+        n++;
+      }
+    });
+    return n ? { v: sum / n, off: false } : { v: null, off: true };
+  }
+
+  /* wiersz pomiarów dodatkowych węzła — chowany, gdy nie ma czego pokazać */
+  _setExtras(el, src) {
+    if (!el) return;
+    const row = el.querySelector('[data-f="extra"]');
+    if (!row) return;
+    const parts = [fmtV(src.volt), fmtA(src.amp), fmtHz(src.freq), fmtVA(src.va), fmtPF(src.pf)].filter(
+      Boolean
+    );
+    row.classList.toggle('hidden', !parts.length);
+    if (parts.length) row.textContent = parts.join(' · ');
+  }
+
+  /* dom opomiarowany licznikiem dwukierunkowym pokazuje pobór i oddanie osobno */
+  _houseMeter() {
+    const h = this._cfg.house;
+    if (!h.energy_import && !h.energy_export) return {};
+    const i = this._energy(h.energy_import);
+    const e = this._energy(h.energy_export);
+    return { energyImport: i.off ? null : i.v, energyExport: e.off ? null : e.v };
+  }
+
+  /* wszystkie pomiary dodatkowe jednego węzła w komplecie */
+  _extras(o) {
+    const u = this._sum(o.voltage, VOLT_FACTOR, false);
+    const a = this._sum(o.current, AMP_FACTOR, false);
+    const f = this._sum(o.frequency, FREQ_FACTOR, false);
+    const s = this._va(o.apparent);
+    const pf = this._pf(o.power_factor);
+    return {
+      volt: u.off ? null : u.v,
+      amp: a.off ? null : a.v,
+      freq: f.off ? null : f.v,
+      va: s.off ? null : s.v,
+      pf: pf.off ? null : pf.v
+    };
+  }
+
   /* `invert` dotyczy wyłącznie mocy — liczniki energii są zawsze narastające i dodatnie */
   _energy(ref) {
-    return this._sum(ref, ENERGY_FACTOR, false);
+    const ids = asList(ref);
+    if (this._period === 'live' || !ids.length) return this._sum(ref, ENERGY_FACTOR, false);
+    /* w trybie okresowym wartością jest przyrost licznika w oknie, policzony przez rejestrator.
+       Encje bez statystyk długoterminowych (brak state_class) czytamy jak dotąd — lepiej
+       pokazać stan bieżący niż kreskę. */
+    let sum = 0;
+    let any = false;
+    let missing = 0;
+    ids.forEach((id) => {
+      const v = this._perVals ? this._perVals.get(id) : undefined;
+      if (v !== undefined) {
+        sum += v;
+        any = true;
+        return;
+      }
+      const r = this._read(id, ENERGY_FACTOR);
+      if (r.missing) missing++;
+      if (!r.off) {
+        sum += r.v;
+        any = true;
+      }
+    });
+    if (any) return { v: sum, off: false };
+    return { v: null, off: true, missing: missing === ids.length };
+  }
+
+  get _period() {
+    if (!this._cfg) return 'live';
+    if (this._perPick && PERIODS.indexOf(this._perPick) >= 0) return this._perPick;
+    return this._cfg.energy_period;
+  }
+
+  /* granice okna: dzień/tydzień(od poniedziałku)/miesiąc/rok, zawsze do teraz */
+  _periodBounds(period) {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    if (period === 'week') {
+      /* getDay(): niedziela = 0, a tydzień liczymy od poniedziałku */
+      const back = (start.getDay() + 6) % 7;
+      start.setDate(start.getDate() - back);
+    } else if (period === 'month') {
+      start.setDate(1);
+    } else if (period === 'year') {
+      start.setMonth(0, 1);
+    }
+    return { start, end };
+  }
+
+  /* wszystkie encje energii z konfiguracji — jedno zbiorcze zapytanie zamiast n odpytań */
+  _energyIds() {
+    const c = this._cfg;
+    const out = new Set();
+    const add = (o) => {
+      if (!o) return;
+      ENERGY_FIELDS.forEach((f) => asList(o[f]).forEach((id) => out.add(id)));
+    };
+    if (c.solar) {
+      add(c.solar);
+      c.solar.strings.forEach(add);
+    }
+    add(c.grid);
+    add(c.battery);
+    add(c.house);
+    const walk = (d) => {
+      add(d);
+      d.children.forEach(walk);
+    };
+    c.groups.forEach((g) => {
+      add(g);
+      (g.devices || []).forEach(walk);
+    });
+    return Array.from(out);
+  }
+
+  /* przyrosty energii w oknie, prosto ze statystyk długoterminowych rejestratora.
+     Dzięki temu wystarczy licznik „od zawsze" — nie trzeba zakładać utility_meter
+     na dzień, tydzień, miesiąc i rok osobno. */
+  async _loadPeriod(force) {
+    const period = this._period;
+    if (period === 'live' || !this._hass || !this._hass.callWS) return;
+    const ids = this._energyIds();
+    if (!ids.length) return;
+    const sig = period + '|' + ids.join(',');
+    const now = Date.now();
+    /* sumy dobowe nie zmieniają się co sekundę, a każde odpytanie to robota dla bazy */
+    if (!force && this._perSig === sig && this._perAt && now - this._perAt < 300000) return;
+    this._perSig = sig;
+    this._perAt = now;
+    const { start, end } = this._periodBounds(period);
+    /* im dłuższe okno, tym grubszy koszyk — inaczej rok to tysiące wierszy na encję */
+    const bucket = period === 'day' ? 'hour' : period === 'year' ? 'month' : 'day';
+    let res;
+    try {
+      res = await this._hass.callWS({
+        type: 'recorder/statistics_during_period',
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        statistic_ids: ids,
+        period: bucket,
+        units: { energy: 'kWh' },
+        types: ['change']
+      });
+    } catch (e) {
+      /* brak rejestratora albo odrzucone zapytanie — zostajemy przy odczycie stanu */
+      this._perVals = null;
+      return;
+    }
+    const vals = new Map();
+    Object.keys(res || {}).forEach((id) => {
+      let sum = 0;
+      let any = false;
+      (res[id] || []).forEach((row) => {
+        if (row.change === undefined || row.change === null) return;
+        sum += row.change;
+        any = true;
+      });
+      if (any) vals.set(id, sum);
+    });
+    this._perVals = vals.size ? vals : null;
+    if (this._built) this._update();
   }
 
   _numeric(entityId) {
@@ -1204,6 +1449,7 @@ class EnergyFlowCard extends HTMLElement {
     const changed = this._syncDiscovered(!this._built);
     if (!this._built || changed) this._build();
     this._update();
+    this._loadPeriod(false);
     if (this._modal) this._syncModalHeader();
   }
 
@@ -1331,6 +1577,16 @@ class EnergyFlowCard extends HTMLElement {
       ${c.kicker ? `<div class="kicker">${esc(c.kicker)}</div>` : ''}
       ${c.title ? `<div class="title">${esc(c.title)}</div>` : ''}
       ${c.subtitle ? `<div class="sub">${esc(c.subtitle)}</div>` : ''}
+      ${
+        c.period_selector
+          ? `<div class="per-bar" id="per-bar" title="${esc(t('per_title'))}">${PERIODS.map(
+              (p) =>
+                `<div class="per-btn ${p === this._period ? 'on' : ''}" data-per="${p}">${esc(
+                  t('per_' + p)
+                )}</div>`
+            ).join('')}</div>`
+          : ''
+      }
     </div>`
       : ''
   }
@@ -1379,6 +1635,7 @@ class EnergyFlowCard extends HTMLElement {
           <div class="lbl">${esc(c.house.name || t('house'))}</div>
           <span class="mono big" data-f="pwr">—</span>
           <div class="mono kwh" data-f="kwh">—</div>
+          <div class="mono dc-row hidden" data-f="extra"></div>
           <div class="mono self" data-f="self">—</div>
         </div>
       </div>
@@ -1390,6 +1647,7 @@ class EnergyFlowCard extends HTMLElement {
             <div class="lbl" data-f="label">${esc(c.grid ? c.grid.name || t('grid') : '')}</div>
             <div class="row"><span class="mono big" data-f="pwr">—</span></div>
             <div class="mono kwh" data-f="kwh">—</div>
+            <div class="mono dc-row hidden" data-f="extra"></div>
           </div>
         </div>
       </div>
@@ -1459,6 +1717,7 @@ class EnergyFlowCard extends HTMLElement {
     this._bindEvents();
     this._bindDrag();
     this._bindLayoutButtons();
+    this._wirePeriod();
 
     /* świeży DOM nie zna bieżącej szerokości ani układu — przywracamy je od razu */
     this._applyBreakpoint();
@@ -1646,16 +1905,17 @@ class EnergyFlowCard extends HTMLElement {
       ? c.solar.strings.map((s, i) => {
           const p = this._power(s.power, s.invert);
           const e = this._energy(s.energy);
-          const u = this._sum(s.voltage, VOLT_FACTOR, false);
-          const a = this._sum(s.current, AMP_FACTOR, false);
+          const ex = this._extras(s);
           return {
             key: s.key,
             name: s.name || this._tx('string_n', { n: i + 1 }),
             icon: s.icon,
             power: p.v,
             energy: e.v,
-            volt: u.off ? null : u.v,
-            amp: a.off ? null : a.v,
+            volt: ex.volt,
+            amp: ex.amp,
+            va: ex.va,
+            pf: ex.pf,
             maxPower: s.max_power,
             pct: s.max_power > 0 && !p.off ? Math.round((Math.abs(p.v) / s.max_power) * 100) : null,
             off: p.off,
@@ -1689,13 +1949,13 @@ class EnergyFlowCard extends HTMLElement {
       solar.pct = solar.maxPower > 0 ? Math.round((Math.abs(solar.power) / solar.maxPower) * 100) : null;
 
       /* strona AC falownika: napięcie, prąd, częstotliwość i stan pracy */
-      const su = this._sum(c.solar.voltage, VOLT_FACTOR, false);
-      const sa = this._sum(c.solar.current, AMP_FACTOR, false);
-      const sf = this._sum(c.solar.frequency, FREQ_FACTOR, false);
+      const sex = this._extras(c.solar);
       const sst = c.solar.status ? this._state(c.solar.status) : null;
-      solar.volt = su.off ? null : su.v;
-      solar.amp = sa.off ? null : sa.v;
-      solar.freq = sf.off ? null : sf.v;
+      solar.volt = sex.volt;
+      solar.amp = sex.amp;
+      solar.freq = sex.freq;
+      solar.va = sex.va;
+      solar.pf = sex.pf;
       solar.status =
         sst && sst.state !== 'unavailable' && sst.state !== 'unknown' ? sst.state : null;
     }
@@ -1724,6 +1984,7 @@ class EnergyFlowCard extends HTMLElement {
         idle: !off && Math.abs(p) < idle,
         energyImport: ei.v,
         energyExport: ee.v,
+        ...this._extras(c.grid),
         powerEntities: asList(c.grid.power).concat(asList(c.grid.power_import)),
         energyEntities: asList(c.grid.energy_import).concat(asList(c.grid.energy_export))
       };
@@ -1753,9 +2014,8 @@ class EnergyFlowCard extends HTMLElement {
       const ownEnergy = asList(d.energy).length > 0;
       const p = ownPower ? this._power(d.power, d.invert) : null;
       const e = ownEnergy ? this._energy(d.energy) : null;
-      /* napięcie i prąd tylko z własnych encji — sumowanie po kanałach nie miałoby sensu */
-      const u = this._sum(d.voltage, VOLT_FACTOR, false);
-      const a = this._sum(d.current, AMP_FACTOR, false);
+      /* pomiary dodatkowe tylko z własnych encji — sumowanie po kanałach nie miałoby sensu */
+      const ex = this._extras(d);
       const kidPower = children.reduce((t, k) => t + (k.off || k.unset ? 0 : k.power), 0);
       const kidEnergy = children.reduce((t, k) => t + (k.energy || 0), 0);
       const kidEntities = (f) => children.reduce((a, k) => a.concat(k[f]), []);
@@ -1774,8 +2034,11 @@ class EnergyFlowCard extends HTMLElement {
       return {
         key: d.key,
         name: d.name || this._tx('device'),
-        volt: u.off ? null : u.v,
-        amp: a.off ? null : a.v,
+        volt: ex.volt,
+        amp: ex.amp,
+        freq: ex.freq,
+        va: ex.va,
+        pf: ex.pf,
         icon: d.icon,
         power,
         energy,
@@ -1847,6 +2110,8 @@ class EnergyFlowCard extends HTMLElement {
         power: Math.max(0, Math.round(derived)),
         energy: c.house.energy && c.house.energy !== 'auto' ? this._energy(c.house.energy).v : consNrg,
         derived: true,
+        ...this._houseMeter(),
+        ...this._extras(c.house),
         powerEntities: (solar ? solar.powerEntities : []).concat(grid ? grid.powerEntities : []),
         energyEntities: c.house.energy && c.house.energy !== 'auto' ? asList(c.house.energy) : []
       };
@@ -1862,6 +2127,8 @@ class EnergyFlowCard extends HTMLElement {
       name: c.house.name || this._tx('house'),
       power: hp && !hp.off ? hp.v : consSum,
       energy: he && !he.off ? he.v : consNrg,
+      ...this._houseMeter(),
+      ...this._extras(c.house),
       powerEntities: c.house.power
         ? asList(c.house.power)
         : groups.reduce((a, g) => a.concat(g.powerEntities), []),
@@ -1916,7 +2183,7 @@ class EnergyFlowCard extends HTMLElement {
         /* wiersz DC: napięcie · prąd · wykorzystanie mocy szczytowej */
         const dc = el.querySelector('[data-f="dc"]');
         if (dc) {
-          const parts = [fmtV(s.volt), fmtA(s.amp)].filter(Boolean);
+          const parts = [fmtV(s.volt), fmtA(s.amp), fmtVA(s.va), fmtPF(s.pf)].filter(Boolean);
           if (s.pct === null && !parts.length) {
             dc.classList.add('hidden');
           } else {
@@ -1952,7 +2219,13 @@ class EnergyFlowCard extends HTMLElement {
       /* wiersz AC: wykorzystanie falownika + napięcie, prąd, częstotliwość */
       const ac = el.querySelector('[data-f="ac"]');
       if (ac) {
-        const parts = [fmtV(m.solar.volt), fmtA(m.solar.amp), fmtHz(m.solar.freq)].filter(Boolean);
+        const parts = [
+          fmtV(m.solar.volt),
+          fmtA(m.solar.amp),
+          fmtHz(m.solar.freq),
+          fmtVA(m.solar.va),
+          fmtPF(m.solar.pf)
+        ].filter(Boolean);
         if (m.solar.pct === null && !parts.length) {
           ac.classList.add('hidden');
         } else {
@@ -1989,7 +2262,15 @@ class EnergyFlowCard extends HTMLElement {
     /* dom */
     const hub = this._els.hub;
     set(hub, 'pwr', fmtW(m.house.power));
-    set(hub, 'kwh', fmtKwh(m.house.energy));
+    /* licznik dwukierunkowy: pobór i oddanie zamiast jednej sumy */
+    set(
+      hub,
+      'kwh',
+      m.house.energyImport !== undefined
+        ? '↓ ' + fmtKwh(m.house.energyImport) + '   ↑ ' + fmtKwh(m.house.energyExport)
+        : fmtKwh(m.house.energy)
+    );
+    this._setExtras(hub, m.house);
     set(hub, 'self', t('self_sufficient', { n: m.house.selfPct }));
     nodes.hub = {
       label: m.house.name,
@@ -2023,6 +2304,7 @@ class EnergyFlowCard extends HTMLElement {
         /* brak odczytu pokazujemy jako „—", nie jako 0,00 — inaczej wygląda jak zerowy licznik */
         m.grid.off ? '—' : '↓ ' + fmtKwh(m.grid.energyImport) + '   ↑ ' + fmtKwh(m.grid.energyExport)
       );
+      this._setExtras(el, m.grid);
       flags(el, m.grid.off, !m.grid.off && m.grid.idle);
       nodes.grid = {
         label,
@@ -2132,7 +2414,9 @@ class EnergyFlowCard extends HTMLElement {
         set(de, 'kwh', d.off ? '—' : fmtKwh(d.energy));
         const dcv = de.querySelector('[data-f="dcv"]');
         if (dcv) {
-          const parts = d.off ? [] : [fmtV(d.volt), fmtA(d.amp)].filter(Boolean);
+          const parts = d.off
+            ? []
+            : [fmtV(d.volt), fmtA(d.amp), fmtHz(d.freq), fmtVA(d.va), fmtPF(d.pf)].filter(Boolean);
           dcv.classList.toggle('hidden', !parts.length);
           dcv.textContent = parts.join(' · ');
         }
@@ -2365,6 +2649,50 @@ class EnergyFlowCard extends HTMLElement {
       this._measure();
       this._toast(this._tx('layout_restored'));
     });
+  }
+
+  /* przełącznik okresu: wybór trzyma się przeglądarki, jak zapisany układ */
+  _wirePeriod() {
+    const bar = this.shadowRoot.getElementById('per-bar');
+    if (!bar) return;
+    bar.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.per-btn');
+      if (!btn) return;
+      const per = btn.dataset.per;
+      if (PERIODS.indexOf(per) < 0 || per === this._period) return;
+      this._perPick = per;
+      this._perVals = null;
+      this._storePeriod(per);
+      Array.from(bar.querySelectorAll('.per-btn')).forEach((b) =>
+        b.classList.toggle('on', b.dataset.per === per)
+      );
+      this._update();
+      this._loadPeriod(true);
+    });
+  }
+
+  _periodKey() {
+    return this._storeKey().replace('efc-layout:', 'efc-period:');
+  }
+
+  _storePeriod(per) {
+    try {
+      window.localStorage.setItem(this._periodKey(), per);
+    } catch (e) {
+      /* prywatne okno albo zablokowany storage — wybór po prostu nie przeżyje odświeżenia */
+    }
+  }
+
+  _loadStoredPeriod() {
+    /* bez przełącznika nie ma czym wybierać — zapamiętany wybór z innej karty
+       nie może po cichu przestawić tej na tryb statystyk */
+    if (!this._cfg.period_selector) return;
+    try {
+      const v = window.localStorage.getItem(this._periodKey());
+      if (v && PERIODS.indexOf(v) >= 0) this._perPick = v;
+    } catch (e) {
+      /* jw. */
+    }
   }
 
   /* pozycje z układu automatycznego → procenty, żeby przejście w tryb swobodny nic nie przesunęło */

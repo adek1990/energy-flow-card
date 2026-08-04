@@ -773,6 +773,125 @@ ok(
   'moc nadal na swoim miejscu'
 );
 
+console.log('\n— moc pozorna i współczynnik mocy —');
+const hassPF = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.pf_p', 872, 'W'),
+    S('sensor.pf_u', 236.4, 'V'),
+    S('sensor.pf_i', 1.72, 'A'),
+    S('sensor.pf_va', 1210.21, 'VA'),
+    S('sensor.pf_cos', 0.65, ''),
+    S('sensor.pf_cos_pct', 72, '%'),
+    S('sensor.pf_p2', 100, 'W')
+  ]),
+  callWS: async () => ({})
+};
+const cpf = document.createElement('energy-flow-card');
+cpf.setConfig({
+  type: 'custom:energy-flow-card',
+  groups: [
+    {
+      name: 'Licznik',
+      expanded: true,
+      devices: [
+        {
+          name: 'Przyłącze',
+          power: 'sensor.pf_p',
+          voltage: 'sensor.pf_u',
+          current: 'sensor.pf_i',
+          apparent: 'sensor.pf_va',
+          power_factor: 'sensor.pf_cos'
+        },
+        { name: 'W procentach', power: 'sensor.pf_p2', power_factor: 'sensor.pf_cos_pct' }
+      ]
+    }
+  ]
+});
+document.body.appendChild(cpf);
+cpf._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cpf.hass = hassPF;
+await new Promise((r) => setTimeout(r, 30));
+const pfRow = (k) => cpf.shadowRoot.querySelector(`[data-node="dev_${k}"] [data-f="dcv"]`).textContent;
+ok(pfRow('d0_0') === '236,4 V · 1,72 A · 1,21 kVA · cosφ 0,65', `pełny wiersz pomiarów: ${pfRow('d0_0')}`);
+ok(cpf._m.groups[0].devices[0].va === 1210.21, 'moc pozorna w modelu');
+ok(pfRow('d0_1') === 'cosφ 0,72', `procenty przeliczone na ułamek: ${pfRow('d0_1')}`);
+// współczynnik mocy z kilku faz to średnia, nie suma
+const avg = cpf._pf(['sensor.pf_cos', 'sensor.pf_cos']);
+ok(avg.v === 0.65, `cosφ z wielu encji uśredniony: ${avg.v}`);
+ok(cpf._va(['sensor.pf_va', 'sensor.pf_va']).v === 2420.42, 'moc pozorna z faz sumowana');
+
+console.log('\n— okresy energii ze statystyk długoterminowych —');
+let statAsk = null;
+const hassPer = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.per_p', 500, 'W'),
+    // licznik „od zawsze" — sam stan jest bezużyteczny jako zużycie dzienne
+    S('sensor.per_e', 1568.26, 'kWh'),
+    S('sensor.per_imp', 1568.26, 'kWh'),
+    S('sensor.per_exp', 1290.64, 'kWh')
+  ]),
+  callWS: async (msg) => {
+    if (msg.type !== 'recorder/statistics_during_period') return {};
+    statAsk = msg;
+    const out = {};
+    msg.statistic_ids.forEach((id) => {
+      out[id] = [{ start: Date.now(), change: id === 'sensor.per_exp' ? 4 : 3 }];
+    });
+    return out;
+  }
+};
+const cper = document.createElement('energy-flow-card');
+cper.setConfig({
+  type: 'custom:energy-flow-card',
+  energy_period: 'day',
+  house: { power: 'sensor.per_p', energy_import: 'sensor.per_imp', energy_export: 'sensor.per_exp' },
+  groups: [{ name: 'G', expanded: true, devices: [{ name: 'D', power: 'sensor.per_p', energy: 'sensor.per_e' }] }]
+});
+document.body.appendChild(cper);
+cper._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cper.hass = hassPer;
+await new Promise((r) => setTimeout(r, 60));
+ok(!!statAsk, 'karta odpytała rejestrator o statystyki');
+ok(statAsk.types.join() === 'change', 'pyta o przyrost, nie o stan licznika');
+ok(statAsk.period === 'hour', `dzień liczony w koszykach godzinowych: ${statAsk.period}`);
+ok(
+  statAsk.statistic_ids.sort().join() === 'sensor.per_e,sensor.per_exp,sensor.per_imp',
+  `jedno zbiorcze zapytanie o wszystkie liczniki: ${statAsk.statistic_ids.join()}`
+);
+ok(cper._m.groups[0].devices[0].energy === 3, `zużycie z przyrostu, nie ze stanu: ${cper._m.groups[0].devices[0].energy}`);
+ok(cper._m.house.energyImport === 3 && cper._m.house.energyExport === 4, 'dom dwukierunkowy z osobnym poborem i oddaniem');
+const hubKwh = cper.shadowRoot.querySelector('[data-node="hub"] [data-f="kwh"]').textContent;
+ok(hubKwh.includes('↓ 3,00 kWh') && hubKwh.includes('↑ 4,00 kWh'), `kafelek domu ze strzałkami: ${hubKwh}`);
+// przełącznik okresu
+const perBar = cper.shadowRoot.getElementById('per-bar');
+ok(!!perBar, 'przełącznik okresu widoczny, gdy okres skonfigurowany');
+ok(perBar.querySelector('.per-btn.on').dataset.per === 'day', 'zaznaczony bieżący okres');
+perBar.querySelector('[data-per="year"]').click();
+await new Promise((r) => setTimeout(r, 40));
+ok(cper._period === 'year', 'kliknięcie zmienia okres');
+ok(statAsk.period === 'month', `rok liczony w koszykach miesięcznych: ${statAsk.period}`);
+ok(perBar.querySelector('.per-btn.on').dataset.per === 'year', 'podświetlenie idzie za wyborem');
+// granice okien
+const b = cper._periodBounds('week');
+ok(b.start.getDay() === 1, `tydzień liczony od poniedziałku: ${b.start.getDay()}`);
+ok(cper._periodBounds('month').start.getDate() === 1, 'miesiąc od pierwszego');
+ok(cper._periodBounds('year').start.getMonth() === 0, 'rok od stycznia');
+// domyślnie nic się nie zmienia — karta bez `energy_period` czyta stan encji
+const cliv = document.createElement('energy-flow-card');
+cliv.setConfig({
+  type: 'custom:energy-flow-card',
+  groups: [{ name: 'G', devices: [{ name: 'D', power: 'sensor.per_p', energy: 'sensor.per_e' }] }]
+});
+document.body.appendChild(cliv);
+cliv._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cliv.hass = hassPer;
+await new Promise((r) => setTimeout(r, 40));
+ok(cliv._period === 'live', 'bez konfiguracji zostaje odczyt stanu');
+ok(cliv._m.groups[0].devices[0].energy === 1568.26, 'stan licznika czytany wprost');
+ok(!cliv.shadowRoot.getElementById('per-bar'), 'przełącznik nie pojawia się nieproszony');
+
 console.log('\n— wykres z wartościami ujemnymi —');
 const hassNeg = {
   themes: { darkMode: true },
