@@ -830,14 +830,17 @@ const hassPer = {
     // licznik „od zawsze" — sam stan jest bezużyteczny jako zużycie dzienne
     S('sensor.per_e', 1568.26, 'kWh'),
     S('sensor.per_imp', 1568.26, 'kWh'),
-    S('sensor.per_exp', 1290.64, 'kWh')
+    S('sensor.per_exp', 1290.64, 'kWh'),
+    S('sensor.per_neg', 7.5, 'kWh')
   ]),
   callWS: async (msg) => {
     if (msg.type !== 'recorder/statistics_during_period') return {};
     statAsk = msg;
     const out = {};
     msg.statistic_ids.forEach((id) => {
-      out[id] = [{ start: Date.now(), change: id === 'sensor.per_exp' ? 4 : 3 }];
+      // licznik z odwróconym znakiem — rejestrator zwraca ujemny przyrost
+      const ch = id === 'sensor.per_exp' ? 4 : id === 'sensor.per_neg' ? -12.4 : 3;
+      out[id] = [{ start: Date.now(), change: ch }];
     });
     return out;
   }
@@ -847,7 +850,16 @@ cper.setConfig({
   type: 'custom:energy-flow-card',
   energy_period: 'day',
   house: { power: 'sensor.per_p', energy_import: 'sensor.per_imp', energy_export: 'sensor.per_exp' },
-  groups: [{ name: 'G', expanded: true, devices: [{ name: 'D', power: 'sensor.per_p', energy: 'sensor.per_e' }] }]
+  groups: [
+    {
+      name: 'G',
+      expanded: true,
+      devices: [
+        { name: 'D', power: 'sensor.per_p', energy: 'sensor.per_e' },
+        { name: 'Odwrotny', power: 'sensor.per_p', energy: 'sensor.per_neg' }
+      ]
+    }
+  ]
 });
 document.body.appendChild(cper);
 cper._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
@@ -857,10 +869,14 @@ ok(!!statAsk, 'karta odpytała rejestrator o statystyki');
 ok(statAsk.types.join() === 'change', 'pyta o przyrost, nie o stan licznika');
 ok(statAsk.period === 'hour', `dzień liczony w koszykach godzinowych: ${statAsk.period}`);
 ok(
-  statAsk.statistic_ids.sort().join() === 'sensor.per_e,sensor.per_exp,sensor.per_imp',
+  statAsk.statistic_ids.sort().join() === 'sensor.per_e,sensor.per_exp,sensor.per_imp,sensor.per_neg',
   `jedno zbiorcze zapytanie o wszystkie liczniki: ${statAsk.statistic_ids.join()}`
 );
 ok(cper._m.groups[0].devices[0].energy === 3, `zużycie z przyrostu, nie ze stanu: ${cper._m.groups[0].devices[0].energy}`);
+ok(
+  cper._m.groups[0].devices[1].energy === 7.5,
+  `ujemny przyrost odrzucony na rzecz stanu encji: ${cper._m.groups[0].devices[1].energy}`
+);
 ok(cper._m.house.energyImport === 3 && cper._m.house.energyExport === 4, 'dom dwukierunkowy z osobnym poborem i oddaniem');
 const hubKwh = cper.shadowRoot.querySelector('[data-node="hub"] [data-f="kwh"]').textContent;
 ok(hubKwh.includes('↓ 3,00 kWh') && hubKwh.includes('↑ 4,00 kWh'), `kafelek domu ze strzałkami: ${hubKwh}`);

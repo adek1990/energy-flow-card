@@ -285,7 +285,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.11.0';
+const EFC_VERSION = '1.11.1';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -1427,7 +1427,10 @@ class EnergyFlowCard extends HTMLElement {
         sum += row.change;
         any = true;
       });
-      if (any) vals.set(id, sum);
+      /* licznik energii nie może zużyć ujemnie — ujemny przyrost oznacza, że rejestrator
+         źle rozpoznał zerowanie licznika albo że encja mierzy z odwróconym znakiem.
+         W obu razach stan bieżący jest bliższy prawdy niż wynik ze statystyk. */
+      if (any && sum >= 0) vals.set(id, sum);
     });
     this._perVals = vals.size ? vals : null;
     if (this._built) this._update();
