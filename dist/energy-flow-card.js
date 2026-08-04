@@ -269,7 +269,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.10.1';
+const EFC_VERSION = '1.10.2';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -1067,6 +1067,10 @@ class EnergyFlowCard extends HTMLElement {
       const a = st.attributes || {};
       if (a.device_class !== 'power') return;
       if (POWER_FACTOR[a.unit_of_measurement] === undefined) return;
+      /* liczniki (utility_meter, integracja) bywają błędnie oznaczone jako device_class: power —
+         wtedy roczne zużycie w kW wchodzi na kartę jako moc chwilowa. Moc chwilowa to zawsze
+         state_class: measurement, więc sumy narastające odrzucamy. */
+      if (a.state_class === 'total' || a.state_class === 'total_increasing') return;
       if (skip.some((p) => id.indexOf(p) >= 0)) return;
       if (cfg.min_power !== null && !this._discKept.has(id)) {
         /* próg decyduje tylko o pierwszym wejściu na listę */

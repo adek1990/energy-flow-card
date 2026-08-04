@@ -554,7 +554,10 @@ ok(stt('selfConsumption').querySelector('.sub').textContent === 'ile produkcji z
 ok(stt('consumed').querySelector('.val').textContent === '97,2 kWh', `dzienne zużycie domu: ${stt('consumed').querySelector('.val').textContent}`);
 
 console.log('\n— autowyszukiwanie nieprzypisanych odbiorników —');
-const P = (id, v, name) => [id, { entity_id: id, state: String(v), attributes: { unit_of_measurement: 'W', device_class: 'power', friendly_name: name } }];
+const P = (id, v, name) => [id, { entity_id: id, state: String(v), attributes: { unit_of_measurement: 'W', device_class: 'power', state_class: 'measurement', friendly_name: name } }];
+/* utility_meter założony na sensor mocy dziedziczy device_class: power i jednostkę kW,
+   choć zlicza energię — bez filtra po state_class roczne zużycie wchodziło na kartę jako moc */
+const METER = (id, v, name) => [id, { entity_id: id, state: String(v), attributes: { unit_of_measurement: 'kW', device_class: 'power', state_class: 'total', friendly_name: name } }];
 const hassDisc = {
   themes: { darkMode: true },
   states: Object.fromEntries([
@@ -563,6 +566,8 @@ const hassDisc = {
     P('sensor.przypisany_power', 50, 'Już w grupie'),
     P('sensor.grid_p2', 4000, 'Sieć'),
     P('sensor.debug_power', 7, 'Debug'),
+    METER('sensor.rekuperator_rok', 238.81, 'Rekuperator Rok'),
+    METER('sensor.rekuperator_dzis', 0.41, 'Rekuperator Dziś'),
     S('sensor.pralka_energy_daily', 0.85, 'kWh'),
     S('sensor.temperatura', 21, '°C', { device_class: 'temperature' })
   ]),
@@ -585,6 +590,8 @@ ok(names.join(', ') === 'Pralka, Zmywarka', `znalezione nieprzypisane: ${names.j
 ok(!names.includes('Już w grupie'), 'encja przypisana do grupy pominięta');
 ok(!names.includes('Sieć'), 'encja użyta w węźle sieci pominięta');
 ok(!names.includes('Debug'), 'wykluczenie po fragmencie id działa');
+ok(!names.includes('Rekuperator Rok'), 'licznik podszywający się pod moc (state_class: total) pominięty');
+ok(!names.includes('Rekuperator Dziś'), 'dzienny licznik z device_class: power pominięty');
 ok(dg.power === 1420, `suma nieprzypisanych: ${dg.power} W`);
 ok(dg.devices[0].energyEntity === 'sensor.pralka_energy_daily', `dopasowany licznik energii: ${dg.devices[0].energyEntity}`);
 ok(dg.devices[1].energyEntity === null, 'brak licznika energii nie psuje wpisu');
