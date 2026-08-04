@@ -884,6 +884,10 @@ ok(hubKwh.includes('↓ 3,00 kWh') && hubKwh.includes('↑ 4,00 kWh'), `kafelek 
 const perBar = cper.shadowRoot.getElementById('per-bar');
 ok(!!perBar, 'przełącznik okresu widoczny, gdy okres skonfigurowany');
 ok(perBar.querySelector('.per-btn.on').dataset.per === 'day', 'zaznaczony bieżący okres');
+ok(
+  Array.from(perBar.querySelectorAll('.per-btn')).map((b) => b.dataset.per).join() === 'day,week,month,year',
+  `przy licznikach lifetime nie ma przycisku surowego stanu: ${Array.from(perBar.querySelectorAll('.per-btn')).map((b) => b.dataset.per).join()}`
+);
 perBar.querySelector('[data-per="year"]').click();
 await new Promise((r) => setTimeout(r, 40));
 ok(cper._period === 'year', 'kliknięcie zmienia okres');

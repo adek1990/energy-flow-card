@@ -124,7 +124,7 @@ const PL = {
   win_days: 'dni',
 
   /* okres energii */
-  per_live: 'Teraz',
+  per_live: 'Stan licznika',
   per_day: 'Dziś',
   per_week: 'Tydzień',
   per_month: 'Miesiąc',
@@ -263,7 +263,7 @@ const EN = {
   win_days: 'days',
 
   /* energy period */
-  per_live: 'Now',
+  per_live: 'Meter reading',
   per_day: 'Today',
   per_week: 'Week',
   per_month: 'Month',
@@ -285,7 +285,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.11.1';
+const EFC_VERSION = '1.11.2';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -900,6 +900,13 @@ class EnergyFlowCard extends HTMLElement {
         raw.period_selector !== undefined
           ? !!raw.period_selector
           : PERIODS.indexOf(raw.energy_period) > 0,
+      /* przy licznikach „od zawsze" przycisk `live` pokazywałby przebieg od montażu
+         (64 MWh na falowniku), więc domyślnie znika, gdy karta liczy okresami */
+      periods: asList(raw.periods).filter((p) => PERIODS.indexOf(p) >= 0).length
+        ? asList(raw.periods).filter((p) => PERIODS.indexOf(p) >= 0)
+        : PERIODS.indexOf(raw.energy_period) > 0
+        ? PERIODS.filter((p) => p !== 'live')
+        : PERIODS,
       solar: null,
       grid: null,
       battery: null,
@@ -1582,7 +1589,7 @@ class EnergyFlowCard extends HTMLElement {
       ${c.subtitle ? `<div class="sub">${esc(c.subtitle)}</div>` : ''}
       ${
         c.period_selector
-          ? `<div class="per-bar" id="per-bar" title="${esc(t('per_title'))}">${PERIODS.map(
+          ? `<div class="per-bar" id="per-bar" title="${esc(t('per_title'))}">${c.periods.map(
               (p) =>
                 `<div class="per-btn ${p === this._period ? 'on' : ''}" data-per="${p}">${esc(
                   t('per_' + p)
@@ -2692,7 +2699,7 @@ class EnergyFlowCard extends HTMLElement {
     if (!this._cfg.period_selector) return;
     try {
       const v = window.localStorage.getItem(this._periodKey());
-      if (v && PERIODS.indexOf(v) >= 0) this._perPick = v;
+      if (v && this._cfg.periods.indexOf(v) >= 0) this._perPick = v;
     } catch (e) {
       /* jw. */
     }
