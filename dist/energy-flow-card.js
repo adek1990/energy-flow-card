@@ -139,6 +139,8 @@ const PL = {
   rep_no_ws: 'Zestawienie wymaga połączenia z rejestratorem Home Assistanta.',
   rep_period: 'Okres',
   rep_sum: 'Suma',
+  rep_section: 'Sekcja',
+  rep_group: 'Grupa',
   rep_entities: 'encje',
   rep_derived: 'wyliczone z bilansu',
   rep_tap: 'dotknij, aby rozwinąć',
@@ -309,6 +311,8 @@ const EN = {
   rep_no_ws: 'The report needs a connection to the Home Assistant recorder.',
   rep_period: 'Period',
   rep_sum: 'Total',
+  rep_section: 'Section',
+  rep_group: 'Group',
   rep_entities: 'entities',
   rep_derived: 'derived from the balance',
   rep_tap: 'tap to expand',
@@ -347,7 +351,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.12.0';
+const EFC_VERSION = '1.12.1';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -1080,7 +1084,10 @@ class EnergyFlowCard extends HTMLElement {
               range:
                 raw.report && RANGES.indexOf(raw.report.range) >= 0 && raw.report.range !== 'custom'
                   ? raw.report.range
-                  : null
+                  : null,
+              /* `long` = wiersz na okres × pozycję (filtry i tabela przestawna w Excelu);
+                 `wide` = kolumna na pozycję, jak arkusz do czytania */
+              csv: raw.report && raw.report.csv === 'wide' ? 'wide' : 'long'
             },
       solar: null,
       grid: null,
@@ -3463,8 +3470,9 @@ class EnergyFlowCard extends HTMLElement {
     return isoDay(d);
   }
 
-  /* CSV: wiersz na koszyk, kolumna na pozycję, na końcu suma. Separator i przecinek wg języka karty,
-     żeby Excel po polsku otworzył plik bez importu. */
+  /* CSV — separator i przecinek wg języka karty, żeby Excel po polsku otworzył plik bez importu.
+     Domyślnie format „długi": wiersz na koszyk × pozycję z kolumnami sekcji i grupy — da się
+     filtrować i wrzucić w tabelę przestawną. `report.csv: wide` daje kolumnę na pozycję. */
   _repCsv() {
     const r = this._rep;
     if (!r || !r.data) return null;
@@ -3473,20 +3481,37 @@ class EnergyFlowCard extends HTMLElement {
     const t = (k, v) => this._tx(k, v);
     const pl = this._dict().locale.slice(0, 2) === 'pl';
     const sep = pl ? ';' : ',';
-    const num = (v) => (v === null || v === undefined ? '' : (pl ? v.toFixed(3).replace('.', ',') : v.toFixed(3)));
+    const num = (v) => (v === null || v === undefined ? '' : pl ? v.toFixed(3).replace('.', ',') : v.toFixed(3));
     const cell = (s) => {
       const str = String(s === null || s === undefined ? '' : s);
       return str.indexOf(sep) >= 0 || /["\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
     };
+    const line = (cells) => cells.map(cell).join(sep);
     const sections = { production: 'rep_production', grid: 'rep_grid', house: 'rep_house', battery: 'rep_battery', consumers: 'rep_consumers' };
-    const head = [t('rep_period')].concat(
-      rows.map((row) => [t(sections[row.section] || row.section)].concat(row.path, [row.label]).join(' / '))
-    );
-    const lines = [head.map(cell).join(sep)];
+    const secName = (row) => t(sections[row.section] || row.section);
+    const lines = [];
+
+    if (this._cfg.report && this._cfg.report.csv === 'wide') {
+      lines.push(line([t('rep_period')].concat(rows.map((row) => [secName(row)].concat(row.path, [row.label]).join(' / ')))));
+      r.data.buckets.forEach((ts, i) => {
+        lines.push(line([this._repBucketLabel(ts, r.data.bucket)].concat(rows.map((row) => num(row.values[i])))));
+      });
+      lines.push(line([t('rep_sum')].concat(rows.map((row) => num(row.total)))));
+      return lines.join('\r\n') + '\r\n';
+    }
+
+    lines.push(line([t('rep_period'), t('rep_section'), t('rep_group'), t('rep_item'), 'kWh', t('rep_entities')]));
+    const src = (row) => (row.derived ? t('rep_derived') : row.ids.join(' + '));
     r.data.buckets.forEach((ts, i) => {
-      lines.push([this._repBucketLabel(ts, r.data.bucket)].concat(rows.map((row) => num(row.values[i]))).map(cell).join(sep));
+      const per = this._repBucketLabel(ts, r.data.bucket);
+      rows.forEach((row) => {
+        lines.push(line([per, secName(row), row.path.join(' / '), row.label, num(row.values[i]), src(row)]));
+      });
     });
-    lines.push([t('rep_sum')].concat(rows.map((row) => num(row.total))).map(cell).join(sep));
+    /* wiersze sumy na końcu, z własną etykietą okresu — filtr „Okres ≠ Suma" je odcina */
+    rows.forEach((row) => {
+      lines.push(line([t('rep_sum'), secName(row), row.path.join(' / '), row.label, num(row.total), src(row)]));
+    });
     return lines.join('\r\n') + '\r\n';
   }
 

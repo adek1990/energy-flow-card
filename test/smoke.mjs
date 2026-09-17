@@ -1502,14 +1502,27 @@ ok(!!rekRow && rekRow.classList.contains('warn') && rekRow.querySelector('.val')
 ok(rekRow.querySelector('.val').getAttribute('title').includes('kierunek'), 'ostrzeżenie tłumaczy, co sprawdzić');
 ok(repTbl.querySelector('[data-rep="dev_d0_0"] .share').textContent.includes('18% zużycia'), `podpis udziału: ${repTbl.querySelector('[data-rep="dev_d0_0"] .share').textContent.trim()}`);
 
-// CSV: nagłówek z pełną ścieżką, wiersz na dobę, suma, polski przecinek i średnik
+// CSV (domyślnie „długi"): wiersz na dobę × pozycję, kolumny do filtrowania, sumy na końcu,
+// polski przecinek i średnik
 const csv = crep._repCsv();
 const csvLines = csv.trim().split('\r\n');
-ok(csvLines.length === 1 + 3 + 1, `CSV: nagłówek + 3 doby + suma = ${csvLines.length} wierszy`);
-ok(csvLines[0].startsWith('Okres;Produkcja / Fotowoltaika łącznie;Produkcja / Falownik 1;'), `nagłówek CSV: ${csvLines[0].slice(0, 70)}…`);
-ok(csvLines[0].includes('Odbiorniki / Moduły / Sonoff / Kanał 1'), 'kolumna kanału ma ścieżkę grupa / moduł / kanał');
-ok(/^\d{4}-\d{2}-\d{2};80,000;30,000;50,000;/.test(csvLines[1]), `wiersz doby z przecinkiem dziesiętnym: ${csvLines[1].slice(0, 40)}`);
-ok(csvLines[4].startsWith('Suma;195,000;75,000;120,000;'), `wiersz sumy: ${csvLines[4].slice(0, 40)}`);
+ok(csvLines.length === 1 + 3 * repRows.length + repRows.length, `CSV długi: nagłówek + 3 doby × ${repRows.length} pozycji + sumy = ${csvLines.length} wierszy`);
+ok(csvLines[0] === 'Okres;Sekcja;Grupa;Pozycja;kWh;encje', `nagłówek CSV: ${csvLines[0]}`);
+ok(/^\d{4}-\d{2}-\d{2};Produkcja;;Fotowoltaika łącznie;80,000;sensor\.r_pv1_e \+ sensor\.r_pv2_e$/.test(csvLines[1]), `pierwszy wiersz: ${csvLines[1]}`);
+const chLine = csvLines.find((l) => l.includes(';Odbiorniki;Moduły / Sonoff;Kanał 1;'));
+ok(!!chLine && chLine.endsWith(';1,000;sensor.r_ch1_e'), `kanał ma sekcję, ścieżkę grupa / moduł i własną encję: ${chLine}`);
+const houseLine = csvLines.find((l) => l.includes(';Dom;;Zużycie domu;'));
+ok(!!houseLine && houseLine.endsWith(';wyliczone z bilansu'), `pozycja z bilansu opisana zamiast encji: ${houseLine}`);
+const sumLines = csvLines.filter((l) => l.startsWith('Suma;'));
+ok(sumLines.length === repRows.length && sumLines[0] === 'Suma;Produkcja;;Fotowoltaika łącznie;195,000;sensor.r_pv1_e + sensor.r_pv2_e', `wiersze sumy: ${sumLines[0]}`);
+// format szeroki na życzenie: kolumna na pozycję
+crep._cfg.report.csv = 'wide';
+const csvW = crep._repCsv().trim().split('\r\n');
+ok(csvW.length === 1 + 3 + 1, `CSV szeroki: nagłówek + 3 doby + suma = ${csvW.length} wierszy`);
+ok(csvW[0].startsWith('Okres;Produkcja / Fotowoltaika łącznie;Produkcja / Falownik 1;'), `nagłówek szeroki: ${csvW[0].slice(0, 70)}…`);
+ok(/^\d{4}-\d{2}-\d{2};80,000;30,000;50,000;/.test(csvW[1]), `wiersz doby szeroki: ${csvW[1].slice(0, 40)}`);
+ok(csvW[4].startsWith('Suma;195,000;75,000;120,000;'), `suma szeroka: ${csvW[4].slice(0, 40)}`);
+crep._cfg.report.csv = 'long';
 ok(/^energia_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.csv$/.test(crep._repCsvName()), `nazwa pliku: ${crep._repCsvName()}`);
 // jsdom nie umie nawigować do blob: — podmieniamy klik odnośnika, żeby złapać nazwę pliku
 let dlName = null;

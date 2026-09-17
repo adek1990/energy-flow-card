@@ -92,7 +92,7 @@ groups:
 | `history`        | bool    | `true`                           | Okno historii po kliknięciu węzła (`false` → standardowe „więcej informacji") |
 | `idle_threshold` | liczba  | `15`                             | Próg w W, poniżej którego węzeł i linia są traktowane jako bezczynne |
 | `summary`        | bool    | `true`                           | Pasek podsumowania dnia pod kartą |
-| `report`         | bool \| obiekt | `true`                     | Zestawienie energii pod kartą; `false` chowa, `{ expanded: false }` zostawia zwinięte, `{ range: month }` ustawia zakres startowy (`today` \| `yesterday` \| `7d` \| `month` \| `year`) |
+| `report`         | bool \| obiekt | `true`                     | Zestawienie energii pod kartą; `false` chowa, `{ expanded: false }` zostawia zwinięte, `{ range: month }` ustawia zakres startowy (`today` \| `yesterday` \| `7d` \| `month` \| `year`), `{ csv: wide }` przełącza eksport na kolumnę-na-pozycję |
 
 ### `solar`
 
@@ -163,9 +163,13 @@ ostatnie 30 / 365 dni — tak jak liczą rachunki. Do dwóch dób koszyki są go
 dobowe, dalej miesięczne; wszystko idzie jednym zapytaniem `recorder/statistics_during_period`.
 Zakres kończący się „teraz" odświeża się co 5 minut, zamknięty — tylko przy zmianie.
 
-**Eksport CSV** zapisuje plik `energia_<od>_<do>.csv`: wiersz na koszyk, kolumna na pozycję
-(`Odbiorniki / Grupa / Urządzenie`), na końcu wiersz `Suma`. Po polsku separator to średnik,
-a dziesiętny przecinek — Excel otwiera plik bez importu; po angielsku przecinek i kropka.
+**Eksport CSV** zapisuje plik `energia_<od>_<do>.csv`. Domyślnie format **długi**: jeden wiersz
+na koszyk × pozycję z kolumnami `Okres; Sekcja; Grupa; Pozycja; kWh; encje` — w Excelu wystarczy
+autofiltr albo tabela przestawna (urządzenie w wierszach, dni w kolumnach). Sumy są na końcu
+z etykietą `Suma` w kolumnie okresu, więc filtr `Okres ≠ Suma` je odcina. `report: { csv: wide }`
+daje format szeroki: kolumna na pozycję (`Odbiorniki / Grupa / Urządzenie`), wiersz na koszyk,
+na końcu `Suma`. Po polsku separator to średnik, a dziesiętny przecinek — Excel otwiera plik bez
+importu; po angielsku przecinek i kropka.
 
 Ujemny przyrost licznika (odwrócony przekładnik, licznik `total_increasing` idący w dół) jest
 zaznaczony na czerwono z ostrzeżeniem — to błąd pomiaru po stronie Home Assistanta, nie karty.
