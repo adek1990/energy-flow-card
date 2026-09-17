@@ -412,6 +412,13 @@ class EnergyFlowCardEditor extends HTMLElement {
           this._emit();
         })
       );
+      sw.appendChild(
+        this._switch('Zestawienie energii pod kartą (tabela + CSV)', c.report !== false, (v) => {
+          if (v) delete this._config.report;
+          else this._config.report = false;
+          this._emit();
+        })
+      );
       b.appendChild(sw);
       b.appendChild(
         this._hint(

@@ -195,7 +195,20 @@ card._openModal(card._nodes['dev_d0_0'], 'dev_d0_0');
 await new Promise((r) => setTimeout(r, 50));
 const mtxt = card._modalHost.textContent;
 ok(mtxt.includes('Pompa ciepła'), 'nagłówek modala');
-ok(mtxt.includes('Dziś') && mtxt.includes('Wczoraj') && mtxt.includes('30 dni'), 'zakresy po polsku');
+ok(mtxt.includes('Dziś') && mtxt.includes('Wczoraj') && mtxt.includes('Miesiąc') && mtxt.includes('Rok'), 'zakresy po polsku');
+ok(!mtxt.includes('30 dni'), 'zamiast ostatnich 30 dni jest kalendarzowy miesiąc');
+// preset „Miesiąc" zaczyna się pierwszego dnia miesiąca, nie 30 dni temu
+card._modalHost.querySelector('[data-range="month"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 50));
+const mw = new Date(card._modal.win.start);
+ok(mw.getDate() === 1 && mw.getHours() === 0 && mw.getMonth() === new Date().getMonth(), `miesiąc w historii liczony od pierwszego: ${mw.toLocaleString('pl-PL')}`);
+card._modalHost.querySelector('[data-range="year"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 50));
+ok(new Date(card._modal.win.start).getMonth() === 0 && new Date(card._modal.win.start).getDate() === 1, 'rok w historii liczony od 1 stycznia');
+const yb = card._rangeBounds();
+ok(yb.bucket === (yb.days > 92 ? 'month' : 'day'), `koszyk dla roku: ${yb.bucket} (${yb.days} dni)`);
+card._modalHost.querySelector('[data-range="today"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 50));
 ok(!!card._modal.chart, 'wykres zbudowany z danych rejestratora');
 ok(card._modal.chart.line.startsWith('M 0.0 '), 'ścieżka wykresu mocy');
 ok(card._modal.chart.bars.length === 12, `słupki energii ze statystyk: ${card._modal.chart.bars.length}`);
@@ -840,7 +853,8 @@ const hassPer = {
     msg.statistic_ids.forEach((id) => {
       // licznik z odwróconym znakiem — rejestrator zwraca ujemny przyrost
       const ch = id === 'sensor.per_exp' ? 4 : id === 'sensor.per_neg' ? -12.4 : 3;
-      out[id] = [{ start: Date.now(), change: ch }];
+      /* koszyki rejestratora zaczynają się na początku okresu, nie „teraz" */
+      out[id] = [{ start: new Date(msg.start_time).getTime(), change: ch }];
     });
     return out;
   }
@@ -1372,6 +1386,216 @@ ok(c7b.shadowRoot.querySelector('[data-lay="hub"]').style.left === '30%', 'pozyc
 c7b.shadowRoot.querySelector('[data-node="hub"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
 ok(!!c7b._modalHost, 'poza trybem przeciągania klik znów otwiera historię');
 c7b._closeModal();
+
+console.log('\n— zestawienie energii pod kartą —');
+const repAsks = [];
+const hassRep = {
+  themes: { darkMode: true },
+  states: Object.fromEntries([
+    S('sensor.r_pv1_p', 1000, 'W'),
+    S('sensor.r_pv1_e', 66141.9, 'kWh'),
+    S('sensor.r_pv2_p', 900, 'W'),
+    S('sensor.r_pv2_e', 12357.8, 'kWh'),
+    S('sensor.r_gimp', 39061, 'kWh'),
+    S('sensor.r_gexp', 36627, 'kWh'),
+    S('sensor.r_hp_p', 300, 'W'),
+    S('sensor.r_hp_e', 958.2, 'kWh'),
+    S('sensor.r_rek_e', -42.9, 'kWh'),
+    S('sensor.r_ch1_e', 5, 'kWh'),
+    S('sensor.r_ch2_e', 7, 'kWh')
+  ]),
+  callWS: async (msg) => {
+    if (msg.type !== 'recorder/statistics_during_period') return {};
+    repAsks.push(msg);
+    /* trzy doby: PV1 30/25/20, PV2 50/40/30, pobór 20 każda, oddanie 60/45/30, pompa 7 każda,
+       rekuperator z odwróconym znakiem, kanały modułu 1 i 2 */
+    const per = {
+      'sensor.r_pv1_e': [30, 25, 20],
+      'sensor.r_pv2_e': [50, 40, 30],
+      'sensor.r_gimp': [20, 20, 20],
+      'sensor.r_gexp': [60, 45, 30],
+      'sensor.r_hp_e': [7, 7, 7],
+      'sensor.r_rek_e': [-0.5, -0.5, -0.5],
+      'sensor.r_ch1_e': [1, 1, 1],
+      'sensor.r_ch2_e': [2, 2, 2]
+    };
+    const out = {};
+    const t0 = new Date(msg.start_time).getTime();
+    const step = msg.period === 'hour' ? 3600000 : msg.period === 'day' ? 86400000 : 30 * 86400000;
+    msg.statistic_ids.forEach((id) => {
+      if (!per[id]) return;
+      out[id] = per[id].map((change, i) => ({ start: t0 + i * step, change }));
+      /* prawdziwy rejestrator dokłada koszyk zaczynający się dokładnie o end_time — karta ma go odciąć */
+      out[id].push({ start: new Date(msg.end_time).getTime(), change: 999 });
+    });
+    return out;
+  }
+};
+const crep = document.createElement('energy-flow-card');
+crep.setConfig({
+  type: 'custom:energy-flow-card',
+  energy_period: 'month',
+  solar: {
+    strings: [
+      { name: 'Falownik 1', power: 'sensor.r_pv1_p', energy: 'sensor.r_pv1_e' },
+      { name: 'Falownik 2', power: 'sensor.r_pv2_p', energy: 'sensor.r_pv2_e' }
+    ]
+  },
+  grid: { power: 'sensor.r_pv1_p', energy_import: 'sensor.r_gimp', energy_export: 'sensor.r_gexp' },
+  house: { power: 'auto', energy: 'auto', unmetered: { name: 'Reszta' } },
+  groups: [
+    { name: 'Ogrzewanie', devices: [{ name: 'Pompa ciepła', power: 'sensor.r_hp_p', energy: 'sensor.r_hp_e' }] },
+    { name: 'Wentylacja', devices: [{ name: 'Rekuperator', energy: 'sensor.r_rek_e' }] },
+    {
+      name: 'Moduły',
+      devices: [
+        {
+          name: 'Sonoff',
+          devices: [
+            { name: 'Kanał 1', energy: 'sensor.r_ch1_e' },
+            { name: 'Kanał 2', energy: 'sensor.r_ch2_e' }
+          ]
+        }
+      ]
+    }
+  ]
+});
+document.body.appendChild(crep);
+crep._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+crep.hass = hassRep;
+await new Promise((r) => setTimeout(r, 80));
+const repEl = crep.shadowRoot.getElementById('report');
+ok(!!repEl, 'sekcja zestawienia renderuje się domyślnie');
+ok(!crep.shadowRoot.getElementById('rep-body').classList.contains('hidden'), 'zestawienie domyślnie rozwinięte');
+ok(crep._rep.range === 'month', `zakres startowy idzie za okresem liczników: ${crep._rep.range}`);
+ok(crep.shadowRoot.querySelector('#rep-chips [data-rrange="month"]').classList.contains('on'), 'chip „Miesiąc" podświetlony');
+const repAsk = repAsks.find((m) => m.statistic_ids.includes('sensor.r_hp_e') && m.statistic_ids.includes('sensor.r_ch1_e'));
+ok(!!repAsk, 'zestawienie pyta rejestrator o wszystkie liczniki jednym zapytaniem');
+ok(new Date(repAsk.start_time).getDate() === 1, `miesiąc w zestawieniu od pierwszego: ${new Date(repAsk.start_time).toLocaleDateString('pl-PL')}`);
+const repItems = crep._repItems();
+const rk = (k) => repItems.find((i) => i.key === k);
+ok(!!rk('pv_total') && rk('pv_total').ids.join() === 'sensor.r_pv1_e,sensor.r_pv2_e', 'produkcja łącznie sumuje stringi');
+ok(!!rk('pv_str0') && rk('pv_str0').depth === 1, 'stringi wcięte pod sumą');
+ok(!!rk('house') && rk('house').formula.plus.join() === 'pv_total,grid_imp' && rk('house').formula.minus.join() === 'grid_exp', 'zużycie domu = PV + pobór − oddanie');
+ok(!!rk('unmetered') && rk('unmetered').formula.minus.join() === 'cons_total', 'reszta niezmierzona = dom − odbiorniki');
+ok(!!rk('grp_moduły_2') && rk('grp_moduły_2').sumOf.join() === 'dev_d2_0', 'grupa sumuje urządzenia');
+ok(!!rk('dev_d2_0') && rk('dev_d2_0').sumOf.join() === 'dev_d2_0_0,dev_d2_0_1', 'moduł bez licznika sumuje kanały');
+ok(rk('dev_d2_0_0').depth === 2 && rk('dev_d2_0_0').path.join('/') === 'Moduły/Sonoff', 'kanał ma ścieżkę grupa/moduł');
+const repRows = crep._repRows(crep._rep.data);
+const rv = (k) => repRows.find((r) => r.key === k);
+ok(rv('pv_total').total === 195, `produkcja łącznie za 3 doby: ${rv('pv_total').total} kWh (oczek. 195)`);
+ok(rv('house').total === 195 + 60 - 135, `zużycie domu z bilansu: ${rv('house').total} kWh (oczek. 120)`);
+ok(rv('self_used').total === 60, `zużyte z PV: ${rv('self_used').total} kWh (oczek. 60)`);
+ok(rv('cons_total').total === 21 - 1.5 + 9, `odbiorniki razem: ${rv('cons_total').total} kWh`);
+ok(rv('unmetered').total === 120 - 28.5, `reszta niezmierzona: ${rv('unmetered').total} kWh`);
+ok(rv('dev_d2_0').total === 9 && rv('dev_d2_0').values.join() === '3,3,3', 'moduł liczy kanały w każdym koszyku');
+ok(rv('pv_str1').share === 62, `udział falownika 2 w produkcji: ${rv('pv_str1').share}% (oczek. 62)`);
+ok(rv('grid_exp').share === 69, `oddanie jako % produkcji: ${rv('grid_exp').share}%`);
+ok(rv('dev_d0_0').share === 18 && rv('dev_d0_0').shareLabel === 'rep_of_house', `pompa jako % zużycia domu: ${rv('dev_d0_0').share}%`);
+const repTbl = crep.shadowRoot.querySelector('.rep-tbl');
+ok(!!repTbl, 'tabela zestawienia zbudowana');
+const repTxt = repTbl.textContent;
+ok(repTxt.includes('Produkcja') && repTxt.includes('Sieć') && repTxt.includes('Dom') && repTxt.includes('Odbiorniki'), 'sekcje tabeli po polsku');
+ok(repTbl.querySelector('[data-rep="pv_total"] .val').textContent === '195,0 kWh', `wartość w tabeli: ${repTbl.querySelector('[data-rep="pv_total"] .val').textContent}`);
+const rekRow = repTbl.querySelector('[data-rep="dev_d1_0"]');
+ok(!!rekRow && rekRow.classList.contains('warn') && rekRow.querySelector('.val').classList.contains('neg'), 'ujemny licznik oznaczony ostrzeżeniem');
+ok(rekRow.querySelector('.val').getAttribute('title').includes('kierunek'), 'ostrzeżenie tłumaczy, co sprawdzić');
+ok(repTbl.querySelector('[data-rep="dev_d0_0"] .share').textContent.includes('18% zużycia'), `podpis udziału: ${repTbl.querySelector('[data-rep="dev_d0_0"] .share').textContent.trim()}`);
+
+// CSV: nagłówek z pełną ścieżką, wiersz na dobę, suma, polski przecinek i średnik
+const csv = crep._repCsv();
+const csvLines = csv.trim().split('\r\n');
+ok(csvLines.length === 1 + 3 + 1, `CSV: nagłówek + 3 doby + suma = ${csvLines.length} wierszy`);
+ok(csvLines[0].startsWith('Okres;Produkcja / Fotowoltaika łącznie;Produkcja / Falownik 1;'), `nagłówek CSV: ${csvLines[0].slice(0, 70)}…`);
+ok(csvLines[0].includes('Odbiorniki / Moduły / Sonoff / Kanał 1'), 'kolumna kanału ma ścieżkę grupa / moduł / kanał');
+ok(/^\d{4}-\d{2}-\d{2};80,000;30,000;50,000;/.test(csvLines[1]), `wiersz doby z przecinkiem dziesiętnym: ${csvLines[1].slice(0, 40)}`);
+ok(csvLines[4].startsWith('Suma;195,000;75,000;120,000;'), `wiersz sumy: ${csvLines[4].slice(0, 40)}`);
+ok(/^energia_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.csv$/.test(crep._repCsvName()), `nazwa pliku: ${crep._repCsvName()}`);
+// jsdom nie umie nawigować do blob: — podmieniamy klik odnośnika, żeby złapać nazwę pliku
+let dlName = null;
+window.HTMLAnchorElement.prototype.click = function () {
+  dlName = this.download;
+};
+crep.shadowRoot.getElementById('rep-csv').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(!!crep._lastCsv && crep._lastCsv.csv === csv, 'przycisk eksportu buduje ten sam CSV');
+ok(dlName === crep._repCsvName(), `pobierany plik ma nazwę z zakresem: ${dlName}`);
+
+// zmiana zakresu: chip „7 dni" → nowe zapytanie od sześciu dni wstecz, koszyk dobowy
+const asksBefore = repAsks.length;
+crep.shadowRoot.querySelector('#rep-chips [data-rrange="7d"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 60));
+ok(repAsks.length === asksBefore + 1, 'zmiana zakresu odpytuje rejestrator ponownie');
+const ask7 = repAsks[repAsks.length - 1];
+ok(ask7.period === 'day', `7 dni w koszykach dobowych: ${ask7.period}`);
+ok(Math.floor((Date.now() - new Date(ask7.start_time).getTime()) / 86400000) === 6 && new Date(ask7.start_time).getHours() === 0, 'zakres 7 dni zaczyna się 6 dób temu, od północy');
+ok(/^\d{4}-\d{2}-\d{2}$/.test(crep.shadowRoot.getElementById('rep-from').value), `pole „od" pokazuje datę: ${crep.shadowRoot.getElementById('rep-from').value}`);
+// własne daty z pól
+const fromEl = crep.shadowRoot.getElementById('rep-from');
+const toEl = crep.shadowRoot.getElementById('rep-to');
+fromEl.value = '2026-09-01';
+fromEl.dispatchEvent(new window.Event('change', { bubbles: true }));
+toEl.value = '2026-09-03';
+toEl.dispatchEvent(new window.Event('change', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 60));
+ok(crep._rep.range === 'custom', 'wpisanie daty przełącza na zakres własny');
+const askC = repAsks[repAsks.length - 1];
+ok(new Date(askC.start_time).getTime() === new Date('2026-09-01T00:00:00').getTime(), `własny zakres od północy „od": ${askC.start_time}`);
+ok(new Date(askC.end_time).getTime() === new Date('2026-09-04T00:00:00').getTime(), `własny zakres do końca doby „do": ${askC.end_time}`);
+ok(crep.shadowRoot.querySelector('#rep-chips [data-rrange="custom"]').classList.contains('on'), 'chip „Zakres" podświetlony');
+ok(crep._rep.data.buckets.length === 3 && !crep._repCsv().includes('999'), 'koszyk zaczynający się o końcu zakresu nie wchodzi do sumy');
+// zwinięcie zapamiętane w przeglądarce
+crep.shadowRoot.getElementById('rep-head').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+ok(crep.shadowRoot.getElementById('rep-body').classList.contains('hidden'), 'klik w nagłówek zwija zestawienie');
+ok(JSON.parse(window.localStorage.getItem(crep._reportKey())).open === false, 'zwinięcie zapisane w localStorage');
+crep.shadowRoot.getElementById('rep-head').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+// `report: false` chowa sekcję; `expanded: false` nie pyta rejestratora, dopóki nikt nie rozwinie
+const cnorep = document.createElement('energy-flow-card');
+cnorep.setConfig({ type: 'custom:energy-flow-card', report: false, groups: [{ name: 'G', devices: [{ name: 'D', power: 'sensor.r_hp_p', energy: 'sensor.r_hp_e' }] }] });
+document.body.appendChild(cnorep);
+cnorep.hass = hassRep;
+ok(!cnorep.shadowRoot.getElementById('report'), 'report: false chowa zestawienie');
+const asksCol = repAsks.length;
+const ccol = document.createElement('energy-flow-card');
+ccol.setConfig({ type: 'custom:energy-flow-card', title: 'Zwinięta', report: { expanded: false }, groups: [{ name: 'G', devices: [{ name: 'D', power: 'sensor.r_hp_p', energy: 'sensor.r_hp_e' }] }] });
+document.body.appendChild(ccol);
+ccol._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+ccol.hass = hassRep;
+await new Promise((r) => setTimeout(r, 40));
+ok(ccol.shadowRoot.getElementById('rep-body').classList.contains('hidden'), 'expanded: false zostawia zestawienie zwinięte');
+ok(repAsks.length === asksCol, 'zwinięte zestawienie nie odpytuje rejestratora');
+ccol.shadowRoot.getElementById('rep-head').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 60));
+ok(repAsks.length === asksCol + 1, 'rozwinięcie dociąga statystyki');
+ok(!!ccol.shadowRoot.querySelector('.rep-tbl'), 'tabela po rozwinięciu');
+
+// licznik „od zawsze" nie może mignąć jako zużycie okresu, zanim rejestrator odpowie
+let releaseStats = null;
+const hassSlow = {
+  themes: { darkMode: true },
+  states: hassRep.states,
+  callWS: (msg) =>
+    new Promise((resolve) => {
+      if (msg.type !== 'recorder/statistics_during_period') return resolve({});
+      releaseStats = () => resolve({ 'sensor.r_pv1_e': [{ start: new Date(msg.start_time).getTime(), change: 12.5 }] });
+    })
+};
+const cslow = document.createElement('energy-flow-card');
+cslow.setConfig({
+  type: 'custom:energy-flow-card',
+  energy_period: 'day',
+  report: false,
+  solar: { strings: [{ name: 'PV', power: 'sensor.r_pv1_p', energy: 'sensor.r_pv1_e' }] }
+});
+document.body.appendChild(cslow);
+cslow._q.card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1500, height: 700 });
+cslow.hass = hassSlow;
+await new Promise((r) => setTimeout(r, 20));
+const pvKwh = () => cslow.shadowRoot.querySelector('[data-node="s_str0"] [data-f="kwh"]').textContent;
+ok(pvKwh() === '—', `przed odpowiedzią rejestratora kreska, nie 66 MWh: ${pvKwh()}`);
+releaseStats();
+await new Promise((r) => setTimeout(r, 20));
+ok(pvKwh() === '12,5 kWh', `po odpowiedzi przyrost z okresu: ${pvKwh()}`);
 
 console.log('\n— edytor —');
 const ed = document.createElement('energy-flow-card-editor');

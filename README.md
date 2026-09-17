@@ -23,7 +23,9 @@ interfejs w całości po polsku.
   encje niedostępne przygasają, ich obramowanie zmienia się na przerywane, a wartość zastępuje słowo
   „niedostępny" zamiast zamrożonego odczytu.
 - **Okno historii** po kliknięciu dowolnego węzła: wykres mocy z rejestratora, słupki energii ze
-  statystyk długoterminowych, zakresy Dziś / Wczoraj / 7 dni / 30 dni oraz własny zakres z kalendarzem.
+  statystyk długoterminowych, zakresy Dziś / Wczoraj / 7 dni / Miesiąc / Rok oraz własny zakres z kalendarzem.
+- **Zestawienie energii pod kartą** — tabela z każdym urządzeniem, produkcją i siecią w wybranym
+  zakresie dat (presety albo dwie daty), z udziałami procentowymi i eksportem do CSV.
 - **Wizualny edytor** w Lovelace — cała konfiguracja przez `ha-entity-picker`, bez pisania YAML-a.
 
 ## Instalacja
@@ -90,6 +92,7 @@ groups:
 | `history`        | bool    | `true`                           | Okno historii po kliknięciu węzła (`false` → standardowe „więcej informacji") |
 | `idle_threshold` | liczba  | `15`                             | Próg w W, poniżej którego węzeł i linia są traktowane jako bezczynne |
 | `summary`        | bool    | `true`                           | Pasek podsumowania dnia pod kartą |
+| `report`         | bool \| obiekt | `true`                     | Zestawienie energii pod kartą; `false` chowa, `{ expanded: false }` zostawia zwinięte, `{ range: month }` ustawia zakres startowy (`today` \| `yesterday` \| `7d` \| `month` \| `year`) |
 
 ### `solar`
 
@@ -145,6 +148,30 @@ Kafelki bez danych chowają się same; cały pasek wyłącza `summary: false`.
 
 Zużycie domu i autokonsumpcja mają sens tylko przy **dziennych** licznikach energii. Liczniki od
 uruchomienia instalacji (typowe dla falowników) dadzą megawatogodziny zamiast dzisiejszych kilowatogodzin.
+
+### Zestawienie energii
+
+Pod paskiem podsumowania jest zwijana tabela **Zestawienie energii**: produkcja (łącznie i każdy
+string), sieć (pobrane / oddane), dom (zużycie, zużyte z PV, reszta niezmierzona), akumulator oraz
+każda grupa i każde urządzenie z własnym licznikiem — moduły z kanałami są wcięte, grupa sumuje
+urządzenia. Obok wartości jest udział: stringi i oddanie jako procent produkcji, odbiorniki i pobór
+jako procent zużycia domu.
+
+Zakres wybiera się chipami **Dziś / Wczoraj / 7 dni / Miesiąc / Rok** albo dwoma polami daty
+(pełne doby, „do" włącznie). *Miesiąc* i *rok* są **kalendarzowe** — od pierwszego dnia, nie
+ostatnie 30 / 365 dni — tak jak liczą rachunki. Do dwóch dób koszyki są godzinowe, do kwartału
+dobowe, dalej miesięczne; wszystko idzie jednym zapytaniem `recorder/statistics_during_period`.
+Zakres kończący się „teraz" odświeża się co 5 minut, zamknięty — tylko przy zmianie.
+
+**Eksport CSV** zapisuje plik `energia_<od>_<do>.csv`: wiersz na koszyk, kolumna na pozycję
+(`Odbiorniki / Grupa / Urządzenie`), na końcu wiersz `Suma`. Po polsku separator to średnik,
+a dziesiętny przecinek — Excel otwiera plik bez importu; po angielsku przecinek i kropka.
+
+Ujemny przyrost licznika (odwrócony przekładnik, licznik `total_increasing` idący w dół) jest
+zaznaczony na czerwono z ostrzeżeniem — to błąd pomiaru po stronie Home Assistanta, nie karty.
+
+Domyślny zakres idzie za `energy_period` (dzień → *Dziś*, miesiąc → *Miesiąc*…); wybór i zwinięcie
+zapamiętuje przeglądarka. `report: false` chowa całą sekcję.
 
 ### Węzeł „Niezmierzone"
 
@@ -331,12 +358,15 @@ Liczby są formatowane wg polskiej lokalizacji (przecinek dziesiętny).
 - **Słupki energii** — `recorder/statistics_during_period` (`period: hour` dla jednego dnia, `day` dla
   dłuższych zakresów, `types: ['change']`). Jeśli encja nie ma statystyk długoterminowych, słupki są
   liczone przez całkowanie przebiegu mocy.
+- Presety **Miesiąc** i **Rok** liczą od pierwszego dnia miesiąca / roku, nie ostatnie 30 / 365 dni.
 - Zakres własny: kalendarz z polskimi nazwami miesięcy, tydzień od poniedziałku, wybór dwóch dat.
 - **Nawigacja po czasie** — `‹` i `›` przesuwają okno o jego własną długość, `−` i `+` je poszerzają
   i zawężają dwukrotnie (zoom trzyma środek), a pola **od/do** przyjmują datę **razem z godziną**.
   Okno nie wychodzi w przyszłość, minimum to 15 minut, maksimum rok. Podpis obok pokazuje
   przedział i jego długość, np. `31.7 08:30 → 31.7 22:12 · 13,7 godz.`
-- Poniżej 48 godzin słupki energii są godzinowe, powyżej — dobowe.
+- Poniżej 48 godzin słupki energii są godzinowe, do kwartału — dobowe, dalej — miesięczne.
+  Powyżej dwóch miesięcy wykres mocy jest pomijany (surowe stany z bazy dla roku to setki tysięcy
+  wierszy), zostają same słupki energii.
 - **Celownik pod kursorem** — pionowa linia z punktem na serii i wartością w danym momencie
   (moc w W/kW z godziną, energia w kWh z datą słupka). Linia przyskakuje do najbliższej próbki,
   więc punkt zawsze leży dokładnie na wykresie, a nie obok niego.
@@ -372,6 +402,21 @@ jednostek, polskie odmiany, generowanie łączników SVG, tryb mobilny, okno his
 npm install
 npm test
 ```
+
+### Sprawdzenie na żywych danych
+
+`tools/live-check.mjs` uruchamia kartę w jsdom na **prawdziwej** konfiguracji z Lovelace, prawdziwych
+stanach i prawdziwym rejestratorze (websocket) i wypisuje, co karta pokazuje dla wybranego okresu,
+tabelę zestawienia oraz zapisuje CSV do `tools/out/`. Wymaga pliku `tokenHA.txt` w katalogu projektu
+(`URL: https://…` i `TOKEN: …`, plik jest w `.gitignore`):
+
+```bash
+node tools/live-check.mjs --period month --range month
+node tools/live-check.mjs --period day --range custom --from 2026-09-01 --to 2026-09-16
+```
+
+Przydaje się do porównania liczb z karty z rachunkiem / portalem operatora bez klikania po
+dashboardzie.
 
 ## Licencja
 

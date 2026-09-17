@@ -85,7 +85,8 @@ const PL = {
   range_today: 'Dziś',
   range_yesterday: 'Wczoraj',
   range_7d: '7 dni',
-  range_30d: '30 dni',
+  range_month: 'Miesiąc',
+  range_year: 'Rok',
   range_custom: 'Zakres',
   now: 'teraz',
   pick_range: 'wybierz datę początkową i końcową',
@@ -104,13 +105,43 @@ const PL = {
   average: 'średnio',
   hourly: 'godzinowo',
   daily: 'dobowo',
+  monthly: 'miesięcznie',
   total: 'łącznie',
   today_suffix: 'dzisiaj',
   months: [
     'styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec',
     'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'
   ],
+  months_short: ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'],
   dow: ['pon', 'wt', 'śr', 'czw', 'pt', 'sob', 'ndz'],
+
+  /* zestawienie energii */
+  rep_title: 'Zestawienie energii',
+  rep_hint: 'przyrosty liczników z rejestratora',
+  rep_item: 'Pozycja',
+  rep_energy: 'Energia',
+  rep_share: 'Udział',
+  rep_csv: 'Eksport CSV',
+  rep_production: 'Produkcja',
+  rep_grid: 'Sieć',
+  rep_house: 'Dom',
+  rep_battery: 'Akumulator',
+  rep_consumers: 'Odbiorniki',
+  rep_house_used: 'Zużycie domu',
+  rep_self_used: 'Zużyte z PV',
+  rep_consumers_sum: 'Odbiorniki razem',
+  rep_of_pv: 'produkcji',
+  rep_of_house: 'zużycia',
+  rep_of_consumers: 'odbiorników',
+  rep_negative: 'ujemny przyrost — sprawdź kierunek pomiaru licznika',
+  rep_loading: 'Pobieranie statystyk…',
+  rep_empty: 'Rejestrator nie ma statystyk dla tego zakresu.',
+  rep_no_ws: 'Zestawienie wymaga połączenia z rejestratorem Home Assistanta.',
+  rep_period: 'Okres',
+  rep_sum: 'Suma',
+  rep_entities: 'encje',
+  rep_derived: 'wyliczone z bilansu',
+  rep_tap: 'dotknij, aby rozwinąć',
 
   /* nawigacja po czasie */
   win_from: 'od',
@@ -224,7 +255,8 @@ const EN = {
   range_today: 'Today',
   range_yesterday: 'Yesterday',
   range_7d: '7 days',
-  range_30d: '30 days',
+  range_month: 'Month',
+  range_year: 'Year',
   range_custom: 'Custom',
   now: 'now',
   pick_range: 'pick a start and end date',
@@ -243,13 +275,43 @@ const EN = {
   average: 'avg',
   hourly: 'hourly',
   daily: 'daily',
+  monthly: 'monthly',
   total: 'total',
   today_suffix: 'today',
   months: [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ],
+  months_short: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   dow: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+
+  /* energy report */
+  rep_title: 'Energy report',
+  rep_hint: 'meter increments from the recorder',
+  rep_item: 'Item',
+  rep_energy: 'Energy',
+  rep_share: 'Share',
+  rep_csv: 'Export CSV',
+  rep_production: 'Production',
+  rep_grid: 'Grid',
+  rep_house: 'House',
+  rep_battery: 'Battery',
+  rep_consumers: 'Consumers',
+  rep_house_used: 'House consumption',
+  rep_self_used: 'Used from solar',
+  rep_consumers_sum: 'Consumers total',
+  rep_of_pv: 'of production',
+  rep_of_house: 'of consumption',
+  rep_of_consumers: 'of consumers',
+  rep_negative: 'negative increment — check the meter direction',
+  rep_loading: 'Fetching statistics…',
+  rep_empty: 'The recorder has no statistics for this range.',
+  rep_no_ws: 'The report needs a connection to the Home Assistant recorder.',
+  rep_period: 'Period',
+  rep_sum: 'Total',
+  rep_entities: 'entities',
+  rep_derived: 'derived from the balance',
+  rep_tap: 'tap to expand',
 
   /* time navigation */
   win_from: 'from',
@@ -285,7 +347,7 @@ const EN = {
     'These entities do not exist in Home Assistant (check the ids in Developer tools → States):'
 };
 
-const EFC_VERSION = '1.11.2';
+const EFC_VERSION = '1.12.0';
 
 const LANGS = { pl: PL, en: EN };
 
@@ -373,6 +435,10 @@ const ENERGY_FACTOR = { Wh: 0.001, kWh: 1, MWh: 1000, GWh: 1000000 };
 const VA_FACTOR = { VA: 1, kVA: 1000, MVA: 1000000 };
 /* `live` czyta stan encji; reszta to okna liczone z przyrostów w rejestratorze */
 const PERIODS = ['live', 'day', 'week', 'month', 'year'];
+/* presety zakresu w oknie historii i w zestawieniu; `custom` = dwie daty z pól */
+const RANGES = ['today', 'yesterday', '7d', 'month', 'year', 'custom'];
+/* okres liczników → domyślny zakres zestawienia, żeby tabela zgadzała się z kafelkami */
+const PERIOD_RANGE = { live: 'today', day: 'today', week: '7d', month: 'month', year: 'year' };
 
 /* pola encji, jakie może mieć węzeł albo urządzenie — używane przy zbieraniu
    „co już jest przypisane" i przy odpytywaniu rejestratora o energię */
@@ -447,6 +513,42 @@ const esc = (s) =>
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const startOfYear = (d) => new Date(d.getFullYear(), 0, 1);
+
+/* „2026-09-17" — do pól <input type="date"> i nazw plików; zawsze czas lokalny */
+const isoDay = (d) => {
+  const p = (v) => String(v).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+};
+
+/* zakres → rozmiar koszyka statystyk: do dwóch dób godzinowo, do kwartału dobowo, dalej miesięcznie */
+const bucketFor = (ms) => (ms <= 48 * 3600000 ? 'hour' : ms <= 92 * 86400000 ? 'day' : 'month');
+
+/* początek koszyka ze statystyk: nowsze HA dają liczbę (ms), starsze — tekst ISO */
+const statRowStart = (row) => (typeof row.start === 'number' ? row.start : new Date(row.start).getTime());
+
+/* presety zakresu wspólne dla okna historii i zestawienia; zawsze do teraz (poza „wczoraj") */
+const presetRange = (key) => {
+  const now = new Date();
+  const today = startOfDay(now);
+  switch (key) {
+    /* zawsze znaczniki czasu — Date + liczba dałoby sklejony tekst */
+    case 'today':
+      return { start: today.getTime(), end: now.getTime() };
+    case 'yesterday':
+      return { start: addDays(today, -1).getTime(), end: today.getTime() };
+    case '7d':
+      return { start: addDays(today, -6).getTime(), end: now.getTime() };
+    /* kalendarzowy miesiąc i rok, nie ostatnie 30 / 365 dni — tak liczą rachunki */
+    case 'month':
+      return { start: startOfMonth(now).getTime(), end: now.getTime() };
+    case 'year':
+      return { start: startOfYear(now).getTime(), end: now.getTime() };
+    default:
+      return null;
+  }
+};
 
 
 /* --------------------------------------------------------------- style */
@@ -693,6 +795,65 @@ const STYLES = `
 .stat.cons .val { color:var(--cons); }
 .stat.grid .val { color:var(--grid); }
 
+/* zestawienie energii: tabela pod kartą z własnym zakresem i eksportem */
+.report { margin-top:14px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden; }
+.rep-head { display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none; }
+.rep-head:hover { background:color-mix(in oklab,var(--cons) 6%,transparent); }
+.rep-title { font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mut); }
+.rep-meta { flex:1;font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.rep-chev { font-size:10px;color:var(--mut); }
+.rep-body { border-top:1px solid var(--line); }
+.rep-bar { display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line); }
+.rep-btn {
+  display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;cursor:pointer;
+  background:var(--panel);border:1px solid var(--line);color:var(--cons);
+  font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;user-select:none;white-space:nowrap;
+}
+.rep-btn:hover { border-color:var(--cons); }
+.rep-btn[disabled] { opacity:.4;cursor:default; }
+.rep-state { padding:22px 14px;text-align:center;font-size:12px;color:var(--mut); }
+.rep-tbl { width:100%;border-collapse:collapse;font-size:12px; }
+.rep-tbl th {
+  text-align:left;font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);
+  padding:8px 14px 6px;border-bottom:1px solid var(--line);
+}
+.rep-tbl th.num, .rep-tbl td.num { text-align:right;white-space:nowrap; }
+.rep-tbl td { padding:5px 14px;border-bottom:1px solid color-mix(in oklab,var(--line) 55%,transparent);vertical-align:middle; }
+.rep-tbl tr:last-child td { border-bottom:none; }
+.rep-tbl tr.sec td {
+  padding-top:11px;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);
+  border-bottom:1px solid var(--line);
+}
+.rep-tbl tr.sec:first-child td { padding-top:8px; }
+.rep-tbl td.name { min-width:0; }
+.rep-tbl td.name .n { white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px; }
+.rep-tbl td.name .e { font-size:9px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px; }
+.rep-tbl tr.total td { font-weight:600; }
+.rep-tbl tr.total td.name .n { color:var(--tx); }
+.rep-tbl tr.d1 td.name { padding-left:28px; }
+.rep-tbl tr.d2 td.name { padding-left:42px; }
+.rep-tbl tr.d3 td.name { padding-left:56px; }
+.rep-tbl tr.grp td.name .n { font-weight:600; }
+.rep-tbl td.val { font-weight:600; }
+.rep-tbl tr.solar td.val { color:var(--solar); }
+.rep-tbl tr.grid td.val { color:var(--grid); }
+.rep-tbl tr.cons td.val { color:var(--cons); }
+.rep-tbl tr.batt td.val { color:var(--batt); }
+.rep-tbl td.val.neg { color:#f87171;cursor:help; }
+.rep-tbl td.share { width:150px;color:var(--mut);font-size:10px;white-space:nowrap; }
+.rep-share { display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;width:100%; }
+.rep-share .trk { width:70px;height:3px;border-radius:2px;background:color-mix(in oklab,var(--mut) 22%,transparent);overflow:hidden; }
+.rep-share .trk i { display:block;height:100%;background:currentColor;border-radius:2px; }
+.rep-tbl tr.solar .rep-share { color:var(--solar); }
+.rep-tbl tr.grid .rep-share { color:var(--grid); }
+.rep-tbl tr.cons .rep-share { color:var(--cons); }
+.rep-tbl tr.warn td.name .n::after { content:' ⚠'; color:#f87171; }
+@media (max-width:560px) {
+  .rep-tbl td.share { width:auto; }
+  .rep-share .trk { display:none; }
+  .rep-tbl td.name .e { display:none; }
+}
+
 .legend {
   display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px;padding:11px 14px;
   border:1px solid var(--line);border-radius:12px;background:var(--card);
@@ -849,7 +1010,8 @@ class EnergyFlowCard extends HTMLElement {
 
   getCardSize() {
     const n = this._cfg && this._cfg.groups ? this._cfg.groups.length : 1;
-    return 6 + Math.ceil(n / 3) * 2;
+    const rep = this._cfg && this._cfg.report && this._repOpen() ? 5 : 0;
+    return 6 + Math.ceil(n / 3) * 2 + rep;
   }
 
   /* ------------------------------------------------------ konfiguracja */
@@ -875,6 +1037,7 @@ class EnergyFlowCard extends HTMLElement {
     this._editLayout = !!this._cfg.layout.edit;
     this._loadStoredLayout();
     this._loadStoredPeriod();
+    this._initReport();
     this._build();
     if (this._hass) this._update();
   }
@@ -907,6 +1070,18 @@ class EnergyFlowCard extends HTMLElement {
         : PERIODS.indexOf(raw.energy_period) > 0
         ? PERIODS.filter((p) => p !== 'live')
         : PERIODS,
+      /* zestawienie pod kartą: `false` chowa, `{ expanded: false }` zostawia zwinięte,
+         `range` ustawia zakres startowy (domyślnie taki jak okres liczników) */
+      report:
+        raw.report === false
+          ? null
+          : {
+              expanded: !(raw.report && raw.report.expanded === false),
+              range:
+                raw.report && RANGES.indexOf(raw.report.range) >= 0 && raw.report.range !== 'custom'
+                  ? raw.report.range
+                  : null
+            },
       solar: null,
       grid: null,
       battery: null,
@@ -1320,6 +1495,9 @@ class EnergyFlowCard extends HTMLElement {
   _energy(ref) {
     const ids = asList(ref);
     if (this._period === 'live' || !ids.length) return this._sum(ref, ENERGY_FACTOR, false);
+    /* zanim rejestrator odpowie, licznik „od zawsze" mignąłby jako zużycie dnia (66 MWh) —
+       do tego czasu pokazujemy kreskę */
+    if (this._perPending && !this._perVals) return { v: null, off: false, pending: true };
     /* w trybie okresowym wartością jest przyrost licznika w oknie, policzony przez rejestrator.
        Encje bez statystyk długoterminowych (brak state_class) czytamy jak dotąd — lepiej
        pokazać stan bieżący niż kreskę. */
@@ -1397,15 +1575,25 @@ class EnergyFlowCard extends HTMLElement {
      na dzień, tydzień, miesiąc i rok osobno. */
   async _loadPeriod(force) {
     const period = this._period;
-    if (period === 'live' || !this._hass || !this._hass.callWS) return;
+    if (period === 'live' || !this._hass || !this._hass.callWS) {
+      this._perPending = false;
+      return;
+    }
     const ids = this._energyIds();
-    if (!ids.length) return;
+    if (!ids.length) {
+      this._perPending = false;
+      return;
+    }
     const sig = period + '|' + ids.join(',');
     const now = Date.now();
     /* sumy dobowe nie zmieniają się co sekundę, a każde odpytanie to robota dla bazy */
     if (!force && this._perSig === sig && this._perAt && now - this._perAt < 300000) return;
     this._perSig = sig;
     this._perAt = now;
+    if (!this._perVals) this._perPending = true;
+    /* szybkie przełączenie okresu: odpowiedź na stare zapytanie nie może nadpisać nowego */
+    const token = {};
+    this._perToken = token;
     const { start, end } = this._periodBounds(period);
     /* im dłuższe okno, tym grubszy koszyk — inaczej rok to tysiące wierszy na encję */
     const bucket = period === 'day' ? 'hour' : period === 'year' ? 'month' : 'day';
@@ -1421,16 +1609,26 @@ class EnergyFlowCard extends HTMLElement {
         types: ['change']
       });
     } catch (e) {
+      if (this._perToken !== token) return;
       /* brak rejestratora albo odrzucone zapytanie — zostajemy przy odczycie stanu */
       this._perVals = null;
+      this._perFailed = true;
+      this._perPending = false;
+      if (this._built) this._update();
       return;
     }
+    if (this._perToken !== token) return;
+    this._perPending = false;
+    this._perFailed = false;
     const vals = new Map();
+    const endTs = end.getTime();
     Object.keys(res || {}).forEach((id) => {
       let sum = 0;
       let any = false;
       (res[id] || []).forEach((row) => {
         if (row.change === undefined || row.change === null) return;
+        /* koszyk zaczynający się o `end_time` należy już do następnego okresu */
+        if (statRowStart(row) >= endTs) return;
         sum += row.change;
         any = true;
       });
@@ -1439,7 +1637,8 @@ class EnergyFlowCard extends HTMLElement {
          W obu razach stan bieżący jest bliższy prawdy niż wynik ze statystyk. */
       if (any && sum >= 0) vals.set(id, sum);
     });
-    this._perVals = vals.size ? vals : null;
+    /* pusta mapa (nie null) — oznacza „odpowiedź była", więc brakujące encje czytamy ze stanu */
+    this._perVals = vals;
     if (this._built) this._update();
   }
 
@@ -1455,11 +1654,15 @@ class EnergyFlowCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._cfg) return;
+    /* pierwszy render w trybie okresowym musi już wiedzieć, że statystyki dopiero jadą —
+       inaczej licznik „od zawsze" mignąłby jako zużycie dnia */
+    if (this._period !== 'live' && !this._perVals && !this._perFailed && hass && hass.callWS) this._perPending = true;
     /* skład grupy z autowyszukiwania zależy od stanów, więc DOM trzeba odbudować */
     const changed = this._syncDiscovered(!this._built);
     if (!this._built || changed) this._build();
     this._update();
     this._loadPeriod(false);
+    this._loadReport(false);
     if (this._modal) this._syncModalHeader();
   }
 
@@ -1698,6 +1901,34 @@ class EnergyFlowCard extends HTMLElement {
   </div>
 
   ${
+    c.report
+      ? `<div class="report" id="report">
+    <div class="rep-head" id="rep-head">
+      <div class="rep-title">${t('rep_title')}</div>
+      <div class="rep-meta" id="rep-meta">${t('rep_hint')}</div>
+      <span class="rep-chev" id="rep-chev">▸</span>
+    </div>
+    <div class="rep-body hidden" id="rep-body">
+      <div class="rep-bar">
+        <div class="chips" id="rep-chips">${RANGES.map(
+          (r) => `<div class="chip" data-rrange="${r}">${esc(t(r === 'today' ? 'range_today' : 'range_' + r))}</div>`
+        ).join('')}</div>
+        <div class="win-range">
+          <span class="mono lbl">${t('win_from')}</span>
+          <input type="date" class="mono win-input" id="rep-from" />
+          <span class="mono lbl">${t('win_to')}</span>
+          <input type="date" class="mono win-input" id="rep-to" />
+        </div>
+        <div style="flex:1"></div>
+        <div class="rep-btn" id="rep-csv" title="${esc(t('rep_csv'))}">⤓ ${t('rep_csv')}</div>
+      </div>
+      <div id="rep-table"></div>
+    </div>
+  </div>`
+      : ''
+  }
+
+  ${
     c.legend
       ? `<div class="legend">
     <div class="it"><span class="sw" style="background:var(--solar);box-shadow:0 0 6px var(--solar)"></span><span class="cap">${t('legend_solar')}</span></div>
@@ -1714,7 +1945,7 @@ class EnergyFlowCard extends HTMLElement {
     <div class="lbl" id="tip-lbl"></div>
     <div class="vals">
       <div><div class="mono v" id="tip-p"></div><div class="c">${t('tip_now')}</div></div>
-      <div><div class="mono v" id="tip-e"></div><div class="c">${t('tip_today')}</div></div>
+      <div><div class="mono v" id="tip-e"></div><div class="c" id="tip-ecap">${t('tip_today')}</div></div>
     </div>
     <div class="mono eid" id="tip-id"></div>
   </div>
@@ -1728,6 +1959,7 @@ class EnergyFlowCard extends HTMLElement {
     this._bindDrag();
     this._bindLayoutButtons();
     this._wirePeriod();
+    this._wireReport();
 
     /* świeży DOM nie zna bieżącej szerokości ani układu — przywracamy je od razu */
     this._applyBreakpoint();
@@ -1769,7 +2001,17 @@ class EnergyFlowCard extends HTMLElement {
       tipLbl: root.getElementById('tip-lbl'),
       tipP: root.getElementById('tip-p'),
       tipE: root.getElementById('tip-e'),
-      tipId: root.getElementById('tip-id')
+      tipId: root.getElementById('tip-id'),
+      report: root.getElementById('report'),
+      repHead: root.getElementById('rep-head'),
+      repMeta: root.getElementById('rep-meta'),
+      repChev: root.getElementById('rep-chev'),
+      repBody: root.getElementById('rep-body'),
+      repChips: root.getElementById('rep-chips'),
+      repFrom: root.getElementById('rep-from'),
+      repTo: root.getElementById('rep-to'),
+      repCsv: root.getElementById('rep-csv'),
+      repTable: root.getElementById('rep-table')
     };
   }
 
@@ -2672,6 +2914,7 @@ class EnergyFlowCard extends HTMLElement {
       if (PERIODS.indexOf(per) < 0 || per === this._period) return;
       this._perPick = per;
       this._perVals = null;
+      this._perPending = per !== 'live';
       this._storePeriod(per);
       Array.from(bar.querySelectorAll('.per-btn')).forEach((b) =>
         b.classList.toggle('on', b.dataset.per === per)
@@ -2702,6 +2945,576 @@ class EnergyFlowCard extends HTMLElement {
       if (v && this._cfg.periods.indexOf(v) >= 0) this._perPick = v;
     } catch (e) {
       /* jw. */
+    }
+  }
+
+  /* ------------------------------------------------ zestawienie energii */
+
+  /* stan zestawienia: zakres, daty własne i rozwinięcie — z konfiguracji, potem z przeglądarki */
+  _initReport() {
+    const c = this._cfg;
+    if (!c.report) {
+      this._rep = null;
+      return;
+    }
+    const today = startOfDay(new Date());
+    this._rep = {
+      open: c.report.expanded,
+      range: c.report.range || PERIOD_RANGE[c.energy_period] || 'today',
+      from: addDays(today, -6).getTime(),
+      to: today.getTime(),
+      loading: false,
+      error: null,
+      data: null,
+      sig: '',
+      at: 0
+    };
+    try {
+      const raw = window.localStorage.getItem(this._reportKey());
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (typeof s.open === 'boolean') this._rep.open = s.open;
+        if (RANGES.indexOf(s.range) >= 0 && s.range !== 'custom') this._rep.range = s.range;
+      }
+    } catch (e) {
+      /* prywatne okno — zostają wartości z konfiguracji */
+    }
+  }
+
+  _reportKey() {
+    return this._storeKey().replace('efc-layout:', 'efc-report:');
+  }
+
+  _storeReport() {
+    try {
+      window.localStorage.setItem(
+        this._reportKey(),
+        JSON.stringify({ open: this._rep.open, range: this._rep.range })
+      );
+    } catch (e) {
+      /* jw. */
+    }
+  }
+
+  _repOpen() {
+    return !!(this._rep && this._rep.open);
+  }
+
+  /* granice zakresu zestawienia; własny zakres to pełne doby od „od" do „do" włącznie */
+  _repBounds() {
+    const r = this._rep;
+    if (!r) return null;
+    const w =
+      r.range === 'custom'
+        ? { start: r.from, end: Math.min(Date.now(), addDays(new Date(r.to), 1).getTime()) }
+        : presetRange(r.range);
+    if (!w || !(w.end > w.start)) return null;
+    return { start: new Date(w.start), end: new Date(w.end), bucket: bucketFor(w.end - w.start) };
+  }
+
+  /* przejście na zakres własny zaczyna od bieżących granic, żeby zmiana jednego pola nie zerowała drugiego */
+  _repSeedCustom() {
+    const r = this._rep;
+    const b = this._repBounds();
+    if (r.range !== 'custom' && b) {
+      r.from = startOfDay(b.start).getTime();
+      r.to = startOfDay(new Date(b.end.getTime() - 1)).getTime();
+    }
+  }
+
+  _wireReport() {
+    const q = this._q;
+    if (!q.report || !this._rep) return;
+    q.repHead.addEventListener('click', () => {
+      this._rep.open = !this._rep.open;
+      this._storeReport();
+      this._applyReport();
+      this._renderReport();
+      this._loadReport(false);
+    });
+    q.repChips.addEventListener('click', (ev) => {
+      const chip = ev.target.closest('[data-rrange]');
+      if (chip) this._setReportRange(chip.dataset.rrange);
+    });
+    ['from', 'to'].forEach((which) => {
+      const el = which === 'from' ? q.repFrom : q.repTo;
+      el.addEventListener('change', () => {
+        if (!el.value) return;
+        const t = new Date(el.value + 'T00:00:00').getTime();
+        if (Number.isNaN(t)) return;
+        const r = this._rep;
+        this._repSeedCustom();
+        r[which] = t;
+        /* „do" przed „od" — dosuwamy drugą datę zamiast odrzucać wybór */
+        if (r.to < r.from) r[which === 'from' ? 'to' : 'from'] = t;
+        r.range = 'custom';
+        this._storeReport();
+        this._applyReport();
+        this._loadReport(true);
+      });
+    });
+    q.repCsv.addEventListener('click', () => this._downloadCsv());
+    this._applyReport();
+    this._renderReport();
+  }
+
+  _setReportRange(range) {
+    if (!this._rep || RANGES.indexOf(range) < 0) return;
+    if (range === 'custom') this._repSeedCustom();
+    this._rep.range = range;
+    this._storeReport();
+    this._applyReport();
+    this._loadReport(true);
+  }
+
+  /* stan przycisków, pól dat i rozwinięcia — bez przebudowy tabeli */
+  _applyReport() {
+    const q = this._q;
+    const r = this._rep;
+    if (!q || !q.report || !r) return;
+    q.repBody.classList.toggle('hidden', !r.open);
+    q.repChev.textContent = r.open ? '▾' : '▸';
+    const b = this._repBounds();
+    Array.from(q.repChips.querySelectorAll('[data-rrange]')).forEach((el) => {
+      const on = el.dataset.rrange === r.range;
+      el.classList.toggle('on', on);
+      el.style.background = on ? 'var(--cons)' : '';
+    });
+    const today = isoDay(new Date());
+    q.repFrom.max = today;
+    q.repTo.max = today;
+    if (b) {
+      q.repFrom.value = isoDay(b.start);
+      q.repTo.value = isoDay(new Date(b.end.getTime() - 1));
+    }
+    q.repMeta.textContent =
+      r.open && b
+        ? this._fmtStamp(b.start) + ' → ' + this._fmtStamp(b.end) + '  ·  ' + this._winLabel(b)
+        : this._tx('rep_hint') + (r.open ? '' : ' · ' + this._tx('rep_tap'));
+  }
+
+  /* pozycje zestawienia z konfiguracji: każda ma listę encji albo wzór na innych pozycjach.
+     Kolejność sekcji: produkcja, sieć, dom, akumulator, odbiorniki. */
+  _repItems() {
+    const c = this._cfg;
+    const t = (k, v) => this._tx(k, v);
+    const items = [];
+    const uniq = (ids) => Array.from(new Set(asList(ids)));
+    const item = (key, section, label, ids, extra) =>
+      Object.assign({ key, section, label, ids: uniq(ids), depth: 0, accent: 'cons', path: [] }, extra || {});
+
+    /* produkcja: suma na górze, stringi wcięte */
+    let pvTotal = null;
+    if (c.solar) {
+      const strings = c.solar.strings
+        .map((s, i) =>
+          asList(s.energy).length
+            ? item('pv_' + s.key, 'production', s.name || t('string_n', { n: i + 1 }), s.energy, { accent: 'solar', depth: 1 })
+            : null
+        )
+        .filter(Boolean);
+      const totalIds = asList(c.solar.energy).length
+        ? uniq(c.solar.energy)
+        : strings.reduce((a, s) => a.concat(s.ids), []);
+      if (totalIds.length) {
+        pvTotal = item('pv_total', 'production', c.solar.name || t('solar_total'), totalIds, { accent: 'solar', total: true });
+        items.push(pvTotal);
+        /* jeden string = ta sama liczba dwa razy, więc wtedy bez rozbicia */
+        if (strings.length > 1) strings.forEach((s) => items.push(s));
+      }
+    }
+
+    /* sieć */
+    let gridImp = null;
+    let gridExp = null;
+    if (c.grid) {
+      if (asList(c.grid.energy_import).length) {
+        gridImp = item('grid_imp', 'grid', t('sum_imported'), c.grid.energy_import, { accent: 'grid' });
+        items.push(gridImp);
+      }
+      if (asList(c.grid.energy_export).length) {
+        gridExp = item('grid_exp', 'grid', t('sum_exported'), c.grid.energy_export, { accent: 'grid' });
+        items.push(gridExp);
+      }
+    }
+
+    /* odbiorniki: grupy z podsumą i urządzenia z własnym licznikiem; kanały wcięte głębiej.
+       Moduł bez własnego licznika sumuje kanały; z własnym — pokazuje licznik, a kanały tylko informacyjnie. */
+    const consumers = [];
+    const groupRows = [];
+    const walkDev = (d, depth, path, out) => {
+      const own = asList(d.energy);
+      const kids = [];
+      d.children.forEach((k) => walkDev(k, depth + 1, path.concat(d.name || t('device')), kids));
+      if (!own.length && !kids.length) return;
+      out.push(
+        own.length
+          ? item('dev_' + d.key, 'consumers', d.name || t('device'), own, { depth, path })
+          : item('dev_' + d.key, 'consumers', (d.name || t('device')) + ' · ' + t('sum_suffix'), [], {
+              depth,
+              path,
+              sumOf: kids.filter((k) => k.depth === depth + 1).map((k) => k.key)
+            })
+      );
+      kids.forEach((k) => out.push(k));
+    };
+    c.groups.forEach((g, gi) => {
+      if (g.virtual) return;
+      const name = g.name || t(g.discovered ? 'discovered' : 'group_n', { n: gi + 1 });
+      const devRows = [];
+      g.devices.forEach((d) => walkDev(d, 1, [name], devRows));
+      let head = null;
+      if (asList(g.energy_import).length) {
+        head = item('grp_' + g.id, 'consumers', name, g.energy_import, { group: true });
+        consumers.push(head);
+        if (asList(g.energy_export).length) {
+          consumers.push(
+            item('grp_' + g.id + '_exp', 'consumers', '↑ ' + t('flow_out'), g.energy_export, {
+              depth: 1,
+              accent: 'solar',
+              path: [name],
+              noShare: true
+            })
+          );
+        }
+      } else if (devRows.length) {
+        head = item('grp_' + g.id, 'consumers', name, [], {
+          group: true,
+          sumOf: devRows.filter((d) => d.depth === 1).map((d) => d.key)
+        });
+        consumers.push(head);
+      }
+      if (head) {
+        groupRows.push(head);
+        devRows.forEach((d) => consumers.push(d));
+      }
+    });
+    const consTotal = groupRows.length
+      ? item('cons_total', 'consumers', t('rep_consumers_sum'), [], { total: true, sumOf: groupRows.map((g) => g.key) })
+      : null;
+
+    /* dom: zużycie z encji albo z bilansu, zużyte z PV, licznik dwukierunkowy domu, reszta niezmierzona */
+    let houseUsed = null;
+    if (c.house.energy && c.house.energy !== 'auto') {
+      houseUsed = item('house', 'house', t('rep_house_used'), c.house.energy, { total: true });
+    } else if (c.house.energy === 'auto' && pvTotal && gridImp) {
+      houseUsed = item('house', 'house', t('rep_house_used'), [], {
+        total: true,
+        derived: true,
+        formula: { plus: [pvTotal.key, gridImp.key], minus: gridExp ? [gridExp.key] : [] }
+      });
+    }
+    if (houseUsed) items.push(houseUsed);
+    if (pvTotal && gridExp) {
+      items.push(
+        item('self_used', 'house', t('rep_self_used'), [], {
+          depth: 1,
+          accent: 'solar',
+          derived: true,
+          clamp: true,
+          formula: { plus: [pvTotal.key], minus: [gridExp.key] }
+        })
+      );
+    }
+    if (asList(c.house.energy_import).length) {
+      items.push(item('house_imp', 'house', (c.house.name || t('house')) + ' ↓', c.house.energy_import, { depth: 1, noShare: true }));
+    }
+    if (asList(c.house.energy_export).length) {
+      items.push(
+        item('house_exp', 'house', (c.house.name || t('house')) + ' ↑', c.house.energy_export, {
+          depth: 1,
+          accent: 'solar',
+          noShare: true
+        })
+      );
+    }
+    const um = c.groups.find((g) => g.virtual);
+    if (um && houseUsed && consTotal) {
+      items.push(
+        item('unmetered', 'house', um.name || t('unmetered'), [], {
+          depth: 1,
+          derived: true,
+          clamp: true,
+          formula: { plus: [houseUsed.key], minus: [consTotal.key] }
+        })
+      );
+    }
+
+    if (c.battery && asList(c.battery.energy).length) {
+      items.push(item('batt', 'battery', c.battery.name || t('battery'), c.battery.energy, { accent: 'batt' }));
+    }
+
+    if (consTotal) items.push(consTotal);
+    consumers.forEach((it) => items.push(it));
+
+    /* punkt odniesienia udziału: produkcja dla PV i oddania, zużycie domu (albo suma odbiorników) dla reszty */
+    const houseRef = houseUsed ? houseUsed.key : consTotal ? consTotal.key : null;
+    const houseRefLabel = houseUsed ? 'rep_of_house' : 'rep_of_consumers';
+    items.forEach((it) => {
+      if (it.noShare) return;
+      if (it.section === 'production' && pvTotal && it.key !== pvTotal.key) {
+        it.shareOf = pvTotal.key;
+        it.shareLabel = 'rep_of_pv';
+      } else if ((it.key === 'grid_exp' || it.key === 'self_used') && pvTotal) {
+        it.shareOf = pvTotal.key;
+        it.shareLabel = 'rep_of_pv';
+      } else if ((it.key === 'grid_imp' || it.key === 'unmetered' || it.section === 'consumers') && houseRef && it.key !== houseRef) {
+        it.shareOf = houseRef;
+        it.shareLabel = houseRefLabel;
+      }
+    });
+    return items;
+  }
+
+  /* przyrosty w oknie dla wszystkich pozycji — jedno zapytanie do rejestratora, koszyk zależny od długości */
+  async _loadReport(force) {
+    const r = this._rep;
+    const q = this._q;
+    if (!r || !r.open || !this._hass || !q || !q.repTable) return;
+    if (!this._hass.callWS) {
+      r.error = this._tx('rep_no_ws');
+      r.data = null;
+      this._renderReport();
+      return;
+    }
+    const b = this._repBounds();
+    if (!b) return;
+    const items = this._repItems();
+    const ids = Array.from(new Set(items.reduce((a, it) => a.concat(it.ids), [])));
+    if (!ids.length) {
+      r.data = null;
+      r.error = null;
+      this._renderReport();
+      return;
+    }
+    const sig = r.range + '|' + b.start.getTime() + '|' + isoDay(b.end) + '|' + ids.join(',');
+    const now = Date.now();
+    /* zakres kończący się „teraz" rośnie, więc odświeżamy go co 5 minut; zamknięty — tylko na żądanie */
+    const live = b.end.getTime() > now - 120000;
+    if (!force && r.sig === sig && r.at && (!live || now - r.at < 300000)) return;
+    r.sig = sig;
+    r.at = now;
+    r.loading = true;
+    r.error = null;
+    const token = {};
+    this._repToken = token;
+    this._renderReport();
+    let res;
+    try {
+      res = await this._hass.callWS({
+        type: 'recorder/statistics_during_period',
+        start_time: b.start.toISOString(),
+        end_time: b.end.toISOString(),
+        statistic_ids: ids,
+        period: b.bucket,
+        units: { energy: 'kWh' },
+        types: ['change']
+      });
+    } catch (e) {
+      if (this._repToken !== token) return;
+      r.loading = false;
+      r.error = (e && e.message) || String(e);
+      r.data = null;
+      this._renderReport();
+      return;
+    }
+    if (this._repToken !== token) return;
+    const starts = new Set();
+    const tsOf = statRowStart;
+    /* rejestrator dokłada koszyk zaczynający się dokładnie o `end_time` (zakres do północy
+       dostawał cały dzisiejszy dzień) — odcinamy wszystko od końca zakresu w górę */
+    const endTs = b.end.getTime();
+    const inRange = (row) => tsOf(row) < endTs;
+    Object.keys(res || {}).forEach((id) =>
+      (res[id] || []).forEach((row) => {
+        if (inRange(row)) starts.add(tsOf(row));
+      })
+    );
+    const buckets = Array.from(starts).sort((x, y) => x - y);
+    const idx = new Map(buckets.map((ts, i) => [ts, i]));
+    const perId = new Map();
+    Object.keys(res || {}).forEach((id) => {
+      const rows = (res[id] || []).filter(inRange);
+      if (!rows.length) return;
+      const arr = new Array(buckets.length).fill(0);
+      rows.forEach((row) => {
+        if (row.change === undefined || row.change === null) return;
+        arr[idx.get(tsOf(row))] += row.change;
+      });
+      perId.set(id, arr);
+    });
+    r.loading = false;
+    r.data = { buckets, bucket: b.bucket, perId, items, bounds: b };
+    this._renderReport();
+  }
+
+  /* wartości pozycji w każdym koszyku i w sumie; pozycje wyliczane liczą się z innych pozycji */
+  _repRows(data) {
+    const n = data.buckets.length;
+    const byKey = new Map(data.items.map((it) => [it.key, it]));
+    const memo = new Map();
+    const valuesOf = (key) => {
+      if (memo.has(key)) return memo.get(key);
+      const it = byKey.get(key);
+      let out = null;
+      if (!it) out = null;
+      else if (it.formula) {
+        const plus = it.formula.plus.map(valuesOf);
+        const minus = it.formula.minus.map(valuesOf);
+        if (plus.every((v) => v !== null)) {
+          out = new Array(n).fill(0).map((_, i) => {
+            let v = plus.reduce((a, arr) => a + arr[i], 0) - minus.reduce((a, arr) => a + (arr ? arr[i] : 0), 0);
+            if (it.clamp) v = Math.max(0, v);
+            return v;
+          });
+        }
+      } else if (it.sumOf) {
+        const parts = it.sumOf.map(valuesOf).filter((v) => v !== null);
+        if (parts.length) out = new Array(n).fill(0).map((_, i) => parts.reduce((a, arr) => a + arr[i], 0));
+      } else {
+        const parts = it.ids.map((id) => data.perId.get(id)).filter(Boolean);
+        if (parts.length) out = new Array(n).fill(0).map((_, i) => parts.reduce((a, arr) => a + arr[i], 0));
+      }
+      memo.set(key, out);
+      return out;
+    };
+    const rows = data.items.map((it) => {
+      const values = valuesOf(it.key);
+      const total = values ? values.reduce((a, v) => a + v, 0) : null;
+      let share = null;
+      if (it.shareOf && total !== null) {
+        const ref = valuesOf(it.shareOf);
+        const refTotal = ref ? ref.reduce((a, v) => a + v, 0) : null;
+        if (refTotal > 0) share = Math.round((100 * Math.max(0, total)) / refTotal);
+      }
+      return Object.assign({}, it, { values, total, share });
+    });
+    return rows.filter((row) => row.values !== null);
+  }
+
+  _renderReport() {
+    const q = this._q;
+    const r = this._rep;
+    if (!q || !q.repTable || !r || !r.open) return;
+    const t = (k, v) => this._tx(k, v);
+    LOCALE = this._dict().locale;
+    const state = (html) => {
+      q.repTable.innerHTML = `<div class="rep-state">${html}</div>`;
+      q.repCsv.setAttribute('disabled', '');
+    };
+    if (r.loading && !r.data) {
+      state(`<div class="spinner" style="margin:0 auto 10px"></div>${t('rep_loading')}`);
+      return;
+    }
+    if (r.error) {
+      state(esc(r.error));
+      return;
+    }
+    if (!r.data || !r.data.buckets.length) {
+      state(t('rep_empty'));
+      return;
+    }
+    const rows = this._repRows(r.data);
+    if (!rows.length) {
+      state(t('rep_empty'));
+      return;
+    }
+    const sections = { production: 'rep_production', grid: 'rep_grid', house: 'rep_house', battery: 'rep_battery', consumers: 'rep_consumers' };
+    let last = null;
+    const html = rows
+      .map((row) => {
+        const sec =
+          row.section !== last
+            ? `<tr class="sec"><td colspan="3">${esc(t(sections[row.section] || row.section))}</td></tr>`
+            : '';
+        last = row.section;
+        const neg = row.total !== null && row.total < -0.0005;
+        const cls = [row.accent, 'd' + row.depth, row.total ? 'total' : '', row.group ? 'grp' : '', neg ? 'warn' : '']
+          .filter(Boolean)
+          .join(' ');
+        const sub = row.derived ? t('rep_derived') : row.ids.join(' + ');
+        const share =
+          row.share === null
+            ? ''
+            : `<span class="rep-share"><span>${nf(row.share, 0)}% ${esc(t(row.shareLabel))}</span><span class="trk"><i style="width:${Math.min(100, row.share)}%"></i></span></span>`;
+        return (
+          sec +
+          `<tr class="${cls}" data-rep="${esc(row.key)}">
+            <td class="name"><div class="n">${esc(row.label)}</div><div class="mono e" title="${esc(sub)}">${esc(sub)}</div></td>
+            <td class="mono num val ${neg ? 'neg' : ''}"${neg ? ` title="${esc(t('rep_negative'))}"` : ''}>${fmtKwh(row.total)}</td>
+            <td class="mono num share">${share}</td>
+          </tr>`
+        );
+      })
+      .join('');
+    q.repTable.innerHTML = `<table class="rep-tbl">
+      <thead><tr><th>${t('rep_item')}</th><th class="num">${t('rep_energy')}</th><th class="num">${t('rep_share')}</th></tr></thead>
+      <tbody>${html}</tbody>
+    </table>`;
+    q.repCsv.removeAttribute('disabled');
+  }
+
+  /* etykieta koszyka: godzina, doba albo miesiąc — zawsze czas lokalny, format sortowalny */
+  _repBucketLabel(ts, bucket) {
+    const d = new Date(ts);
+    const p = (v) => String(v).padStart(2, '0');
+    if (bucket === 'hour') return isoDay(d) + ' ' + p(d.getHours()) + ':00';
+    if (bucket === 'month') return d.getFullYear() + '-' + p(d.getMonth() + 1);
+    return isoDay(d);
+  }
+
+  /* CSV: wiersz na koszyk, kolumna na pozycję, na końcu suma. Separator i przecinek wg języka karty,
+     żeby Excel po polsku otworzył plik bez importu. */
+  _repCsv() {
+    const r = this._rep;
+    if (!r || !r.data) return null;
+    const rows = this._repRows(r.data);
+    if (!rows.length) return null;
+    const t = (k, v) => this._tx(k, v);
+    const pl = this._dict().locale.slice(0, 2) === 'pl';
+    const sep = pl ? ';' : ',';
+    const num = (v) => (v === null || v === undefined ? '' : (pl ? v.toFixed(3).replace('.', ',') : v.toFixed(3)));
+    const cell = (s) => {
+      const str = String(s === null || s === undefined ? '' : s);
+      return str.indexOf(sep) >= 0 || /["\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+    };
+    const sections = { production: 'rep_production', grid: 'rep_grid', house: 'rep_house', battery: 'rep_battery', consumers: 'rep_consumers' };
+    const head = [t('rep_period')].concat(
+      rows.map((row) => [t(sections[row.section] || row.section)].concat(row.path, [row.label]).join(' / '))
+    );
+    const lines = [head.map(cell).join(sep)];
+    r.data.buckets.forEach((ts, i) => {
+      lines.push([this._repBucketLabel(ts, r.data.bucket)].concat(rows.map((row) => num(row.values[i]))).map(cell).join(sep));
+    });
+    lines.push([t('rep_sum')].concat(rows.map((row) => num(row.total))).map(cell).join(sep));
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  _repCsvName() {
+    const b = this._rep && this._rep.data && this._rep.data.bounds;
+    if (!b) return 'energia.csv';
+    return 'energia_' + isoDay(b.start) + '_' + isoDay(new Date(b.end.getTime() - 1)) + '.csv';
+  }
+
+  _downloadCsv() {
+    const csv = this._repCsv();
+    if (!csv) return;
+    const name = this._repCsvName();
+    this._lastCsv = { name, csv };
+    try {
+      /* BOM, żeby Excel rozpoznał UTF-8 (polskie znaki w nazwach urządzeń) */
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      /* brak Blob/URL (stare WebView) — plik ląduje w konsoli */
+      console.info('[energy-flow-card] ' + name + '\n' + csv);
     }
   }
 
@@ -3012,6 +3825,8 @@ class EnergyFlowCard extends HTMLElement {
     this._q.tipLbl.textContent = n.label;
     this._q.tipP.textContent = n.off ? this._tx('unavailable') : fmtW(n.power);
     this._q.tipE.textContent = n.off ? '—' : fmtKwh(n.energy);
+    const cap = this.shadowRoot.getElementById('tip-ecap');
+    if (cap) cap.textContent = this._energySuffix();
     this._q.tipId.textContent = n.entityId;
     t.style.display = 'block';
     t.style.left = Math.min(ev.clientX + 16, window.innerWidth - 250) + 'px';
@@ -3073,26 +3888,18 @@ class EnergyFlowCard extends HTMLElement {
     const p = this._modalHost.querySelector('.m-val .p');
     const k = this._modalHost.querySelector('.m-val .k');
     if (p) p.textContent = src.off ? this._tx('unavailable') : fmtW(src.power);
-    if (k) k.textContent = (src.off ? '—' : fmtKwh(src.energy)) + ' ' + this._tx('today_suffix');
+    if (k) k.textContent = (src.off ? '—' : fmtKwh(src.energy)) + ' ' + this._energySuffix();
+  }
+
+  /* podpis liczby energii w nagłówku okna: „dzisiaj" przy odczycie stanu, nazwa okresu przy statystykach */
+  _energySuffix() {
+    const per = this._period;
+    return per === 'live' || per === 'day' ? this._tx('today_suffix') : this._tx('per_' + per).toLowerCase();
   }
 
   /* preset → okno czasowe; dalej operujemy już tylko na oknie */
   _presetWin(key) {
-    const now = new Date();
-    const today = startOfDay(now);
-    switch (key) {
-      /* zawsze znaczniki czasu — Date + liczba dałoby sklejony tekst */
-      case 'today':
-        return { start: today.getTime(), end: now.getTime() };
-      case 'yesterday':
-        return { start: addDays(today, -1).getTime(), end: today.getTime() };
-      case '7d':
-        return { start: addDays(today, -6).getTime(), end: now.getTime() };
-      case '30d':
-        return { start: addDays(today, -29).getTime(), end: now.getTime() };
-      default:
-        return null;
-    }
+    return presetRange(key);
   }
 
   _rangeBounds() {
@@ -3102,8 +3909,9 @@ class EnergyFlowCard extends HTMLElement {
     return {
       start: new Date(w.start),
       end: new Date(w.end),
-      /* do dwóch dób rysujemy godzinowo, powyżej — dobowo */
+      /* do dwóch dób rysujemy godzinowo, powyżej — dobowo, od kwartału — miesięcznie */
       single: ms <= 48 * 3600000,
+      bucket: bucketFor(ms),
       days: Math.max(1, Math.round(ms / 86400000))
     };
   }
@@ -3202,8 +4010,10 @@ class EnergyFlowCard extends HTMLElement {
 
     try {
       const n = b.single ? 96 : Math.min(360, b.days * 12);
-      const power = await this._powerSeries(m.node.powerEntities, b.start, b.end, n);
-      const bars = await this._energyBars(m.node.energyEntities, b.start, b.end, b.single);
+      /* przebieg mocy to surowe stany z bazy — dla kwartału czy roku byłyby to setki tysięcy
+         wierszy na encję, więc powyżej dwóch miesięcy zostają same słupki energii */
+      const power = b.days > 62 ? null : await this._powerSeries(m.node.powerEntities, b.start, b.end, n);
+      const bars = await this._energyBars(m.node.energyEntities, b.start, b.end, b.bucket);
       if (this._loadToken !== token || !this._modal) return;
       m.chart = this._buildChart(power, bars, b, m.node.accent);
     } catch (err) {
@@ -3264,7 +4074,7 @@ class EnergyFlowCard extends HTMLElement {
     return any ? { values: total, t0, step } : null;
   }
 
-  async _energyBars(ids, start, end, single) {
+  async _energyBars(ids, start, end, bucket) {
     const list = Array.from(new Set((ids || []).filter(Boolean)));
     if (!list.length) return null;
     let res;
@@ -3274,7 +4084,7 @@ class EnergyFlowCard extends HTMLElement {
         start_time: start.toISOString(),
         end_time: end.toISOString(),
         statistic_ids: list,
-        period: single ? 'hour' : 'day',
+        period: bucket || 'day',
         units: { energy: 'kWh' },
         types: ['change']
       });
@@ -3284,9 +4094,12 @@ class EnergyFlowCard extends HTMLElement {
     if (!res) return null;
 
     const buckets = new Map();
+    const endTs = end.getTime();
     Object.keys(res).forEach((id) => {
       (res[id] || []).forEach((row) => {
-        const ts = typeof row.start === 'number' ? row.start : new Date(row.start).getTime();
+        const ts = statRowStart(row);
+        /* „wczoraj" kończy się o północy — bez tego rejestrator dokładał słupek z dzisiaj */
+        if (ts >= endTs) return;
         const v = row.change !== undefined && row.change !== null ? row.change : 0;
         buckets.set(ts, (buckets.get(ts) || 0) + v);
       });
@@ -3384,14 +4197,16 @@ class EnergyFlowCard extends HTMLElement {
           y: Math.min(y, barZero).toFixed(1)
         };
       });
+      const monthly = bounds.bucket === 'month';
       barLabels = barsData.map((b, i) => {
         const d = new Date(b.t);
         if (bounds.single) return i % 3 === 0 ? d.getHours() + ':00' : '';
+        if (monthly) return this._dict().months_short[d.getMonth()];
         if (vals.length > 14) return i % 4 === 0 ? d.getDate() + '.' + (d.getMonth() + 1) : '';
         return d.getDate() + '.' + (d.getMonth() + 1);
       });
       barCaption =
-        (bounds.single ? this._tx('hourly') : this._tx('daily')) + ' · ' +
+        this._tx(bounds.single ? 'hourly' : monthly ? 'monthly' : 'daily') + ' · ' +
         fmtKwh(vals.reduce((a, b) => a + b, 0)) +
         ' ' + this._tx('total');
     }
@@ -3417,6 +4232,7 @@ class EnergyFlowCard extends HTMLElement {
       t0,
       step,
       single: bounds.single,
+      bucket: bounds.bucket,
       barPoints: barsData || []
     };
   }
@@ -3486,11 +4302,17 @@ class EnergyFlowCard extends HTMLElement {
 
     /* słupki energii */
     if (ch.barPoints && ch.barPoints.length) {
+      const barStamp = (t) => {
+        const d = new Date(t);
+        if (ch.bucket === 'month') return this._dict().months_short[d.getMonth()] + ' ' + d.getFullYear();
+        if (ch.bucket === 'day') return d.getDate() + '.' + (d.getMonth() + 1);
+        return stamp(t);
+      };
       attach(
         host.querySelector('.bars-wrap'),
         ch.barPoints.length,
         (i) => fmtKwh(Math.max(0, ch.barPoints[i].v || 0)),
-        (i) => stamp(ch.barPoints[i].t),
+        (i) => barStamp(ch.barPoints[i].t),
         null
       );
     }
@@ -3634,14 +4456,14 @@ class EnergyFlowCard extends HTMLElement {
     </div>
     <div class="m-val">
       <div class="mono p" style="color:${accent}">${n.off ? t('unavailable') : fmtW(n.power)}</div>
-      <div class="mono k">${(n.off ? '—' : fmtKwh(n.energy)) + ' ' + t('today_suffix')}</div>
+      <div class="mono k">${(n.off ? '—' : fmtKwh(n.energy)) + ' ' + this._energySuffix()}</div>
     </div>
     <div class="m-close" id="m-close">✕</div>
   </div>
 
   <div class="m-bar">
     <div class="chips">
-      ${chip('today', t('range_today'))}${chip('yesterday', t('range_yesterday'))}${chip('7d', t('range_7d'))}${chip('30d', t('range_30d'))}${chip('custom', t('range_custom'))}
+      ${RANGES.map((r) => chip(r, t(r === 'today' ? 'range_today' : 'range_' + r))).join('')}
     </div>
     <div class="chips">
       <div class="chip nav" id="win-prev" title="${t('win_prev')}">‹</div>
